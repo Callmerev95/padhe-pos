@@ -1,0 +1,164 @@
+// --- MODEL YANG SUDAH ADA (DIPERTAHANKAN) ---
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id        String    @id @default(cuid())
+  name      String
+  email     String    @unique
+  password  String
+  image     String?
+  role      Role      @default(CASHIER)
+  createdAt DateTime  @default(now())
+  sessions  Session[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Category {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  createdAt DateTime  @default(now())
+  color     String    @default("slate") 
+  updatedAt DateTime  @updatedAt
+  products  Product[]
+}
+
+// --- UPDATE PADA MODEL PRODUCT ---
+
+model Product {
+  id           String       @id @default(cuid())
+  name         String
+  price        Int
+  isActive     Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  categoryId   String
+  description  String?
+  sku          String?      @unique
+  stock        Int          @default(0)
+  categoryType CategoryType @default(FOOD)
+  imageUrl     String?
+  updateAt     DateTime?    @default(now()) @db.Timestamptz(6)
+  category     Category     @relation(fields: [categoryId], references: [id])
+  
+  recipes      Recipe[]
+
+  @@index([categoryId])
+}
+
+// --- MODEL MANAJEMEN STOK & COGS ---
+
+model Ingredient {
+  id                String    @id @default(cuid())
+  name              String    @unique 
+  category          String?   
+  
+  stock             Float     @default(0) 
+  unitUsage         String    @default("gram") 
+  
+  lastPurchasePrice Int       @default(0) 
+  averagePrice      Float     @default(0) 
+  
+  minStock          Float     @default(0) 
+  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  recipes           Recipe[]
+  stockLogs         StockLog[]
+}
+
+model Recipe {
+  id           String     @id @default(cuid())
+  productId    String
+  ingredientId String
+  quantity     Float      
+  
+  product      Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([ingredientId])
+}
+
+model StockLog {
+  id            String       @id @default(cuid())
+  ingredientId  String
+  type          StockLogType 
+  quantity      Float
+  previousStock Float
+  currentStock  Float
+  note          String?    
+  createdAt     DateTime     @default(now())
+
+  ingredient    Ingredient   @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+
+  @@index([ingredientId])
+}
+
+// --- UPDATE MODEL EXPENSE DENGAN ENUM ---
+
+model Expense {
+  id        String          @id @default(cuid())
+  name      String          // Listrik, Gaji, Makan, dll
+  amount    Int
+  category  ExpenseCategory @default(OPERASIONAL)
+  date      DateTime        @default(now())
+  note      String?
+  createdAt DateTime        @default(now())
+}
+
+// --- ENUMS ---
+
+enum Role {
+  ADMIN
+  CASHIER
+}
+
+enum CategoryType {
+  FOOD
+  DRINK
+}
+
+enum StockLogType {
+  IN
+  OUT
+  ADJUSTMENT
+}
+
+enum ExpenseCategory {
+  OPERASIONAL
+  GAJI
+  MARKETING
+  MAINTENANCE
+  SEWA
+  LAIN_LAIN
+}
+
+model Order {
+  id            String   @id
+  customerName  String   @default("Guest")
+  total         Int
+  paid          Int
+  paymentMethod String
+  orderType     String
+  items         Json     
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([createdAt])
+}

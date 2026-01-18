@@ -1,0 +1,24 @@
+{
+  "name": "Coffee POS Offline",
+  "short_name": "POS",
+  "description": "Point of Sale yang tetap jalan tanpa internet",
+  "start_url": "/pos",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/924/924514.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "screenshots": [
+  {
+    "src": "https://cdn-icons-png.flaticon.com/512/924/924514.png",
+    "sizes": "512x512",
+    "type": "image/png",
+    "form_factor": "wide"
+  }
+]
+}
