@@ -86,7 +86,7 @@ export async function getAllOrders(): Promise<LocalOrder[]> {
 }
 
 export async function getOrderById(id: string): Promise<LocalOrder> {
-  const db = await openDB(); 
+  const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_ORDERS, "readonly");
     const store = tx.objectStore(STORE_ORDERS);
@@ -95,7 +95,7 @@ export async function getOrderById(id: string): Promise<LocalOrder> {
     req.onerror = () => reject(req.error);
   });
 }
- 
+
 export async function deleteOrder(id: string) {
   const db = await openDB();
   const tx = db.transaction(STORE_ORDERS, "readwrite");
@@ -126,5 +126,17 @@ export async function deleteHoldOrderLocal(id: string) {
   const db = await openDB();
   const tx = db.transaction(STORE_HOLD_ORDERS, "readwrite");
   tx.objectStore(STORE_HOLD_ORDERS).delete(id);
+  return tx.oncomplete;
+}
+
+export async function upsertOrdersFromCloud(cloudOrders: LocalOrder[]) {
+  const db = await openDB();
+  const tx = db.transaction(STORE_ORDERS, "readwrite");
+  const store = tx.objectStore(STORE_ORDERS);
+
+  for (const order of cloudOrders) {
+    // Simpan order dari cloud dengan isSynced = true
+    store.put({ ...order, isSynced: true });
+  }
   return tx.oncomplete;
 }

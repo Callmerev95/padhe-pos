@@ -1,7 +1,7 @@
 "use client";
 
 import { Search, Package, Receipt, ArrowRight, Loader2, Plus } from "lucide-react";
-import { useRef, useState, useEffect } from "react"; 
+import { useRef, useState, useEffect } from "react";
 import { useGlobalSearch } from "@/hooks/useGlobalSearch";
 import { useCartStore } from "@/store/useCartStore";
 import { usePathname, useRouter } from "next/navigation";
@@ -27,17 +27,17 @@ interface OrderResult {
 export function GlobalSearch() {
   const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
-  const [selectedIndex, setSelectedIndex] = useState(0); 
-  
+  const [selectedIndex, setSelectedIndex] = useState(0);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  
+
   const pathname = usePathname();
   const router = useRouter();
   const addItem = useCartStore((s) => s.addItem);
   // TAMBAHAN: Panggil fungsi openOrder dari store
   const openOrder = useOrderStore((s) => s.openOrder);
-  
+
   const { products, orders, isLoading } = useGlobalSearch(query);
 
   const allResults = [...products, ...orders];
@@ -63,6 +63,9 @@ export function GlobalSearch() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Effect baru: Jika di halaman recipes, update URL saat mengetik
+
+
   const handleSelectProduct = (p: Product) => {
     if (pathname === "/pos") {
       addItem({
@@ -73,7 +76,7 @@ export function GlobalSearch() {
       });
       setQuery("");
       setIsOpen(false);
-      setSelectedIndex(0); 
+      setSelectedIndex(0);
     } else {
       router.push("/products");
       setIsOpen(false);
@@ -102,7 +105,7 @@ export function GlobalSearch() {
       if (allResults.length > 0) {
         const targetIndex = allResults.length === 1 ? 0 : selectedIndex;
         const item = allResults[targetIndex];
-        
+
         if (item) {
           if ("price" in item) {
             handleSelectProduct(item as Product);
@@ -141,19 +144,19 @@ export function GlobalSearch() {
         placeholder="Cari transaksi, pelanggan, produk... (Ctrl+K)"
         className="w-full bg-slate-50 border border-slate-100 py-2.5 pl-11 pr-4 rounded-2xl text-sm outline-none focus:bg-white focus:border-cyan-200 transition-all shadow-sm text-slate-900"
       />
-      
+
       {isOpen && query.length >= 2 && (
         <div className="absolute top-full left-0 w-full mt-3 bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2">
           <div className="max-h-80 overflow-y-auto p-2">
-            
+
             {products.length > 0 && (
               <div className="mb-4">
                 <p className="text-[10px] font-bold text-slate-400 px-3 py-2 uppercase tracking-widest">Produk</p>
                 {products.map((p, index) => (
                   <div key={p.id} onClick={() => handleSelectProduct(p as Product)}>
-                    <SearchItem 
-                      icon={<Package size={16} />} 
-                      title={p.name} 
+                    <SearchItem
+                      icon={<Package size={16} />}
+                      title={p.name}
                       subtitle={`Rp ${p.price.toLocaleString()}`}
                       rightIcon={pathname === "/pos" ? <Plus size={14} /> : <ArrowRight size={14} />}
                       isSelected={index === selectedIndex}
@@ -170,10 +173,10 @@ export function GlobalSearch() {
                   const actualIndex = products.length + index;
                   return (
                     <div key={o.id} onClick={() => handleSelectOrder(o as OrderResult)}>
-                      <SearchItem 
-                        icon={<Receipt size={16} />} 
-                        title={o.customerName || `Order #${o.id.slice(-4)}`} 
-                        subtitle={`Total: Rp ${o.total.toLocaleString()} ${o.customerName ? `• #${o.id.slice(-4)}` : ''}`} 
+                      <SearchItem
+                        icon={<Receipt size={16} />}
+                        title={o.customerName || `Order #${o.id.slice(-4)}`}
+                        subtitle={`Total: Rp ${o.total.toLocaleString()} ${o.customerName ? `• #${o.id.slice(-4)}` : ''}`}
                         isSelected={actualIndex === selectedIndex}
                       />
                     </div>
@@ -208,7 +211,7 @@ function SearchItem({ icon, title, subtitle, rightIcon, isSelected }: SearchItem
       </div>
       <div className="flex-1 text-left">
         <h4 className={cn(
-          "text-sm font-semibold transition-colors", 
+          "text-sm font-semibold transition-colors",
           isSelected ? "text-cyan-900" : "text-slate-700"
         )}>
           {title}

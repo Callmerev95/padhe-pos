@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { MoreHorizontal, Edit, Trash2, Loader2 } from "lucide-react";
+import { MoreHorizontal, Edit, Trash2, Loader2, Receipt } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,58 +37,43 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { deleteIngredient, updateIngredient } from "./actions";
+import { deleteExpense, updateExpense } from "./actions";
+import { Expense, ExpenseCategory } from "@prisma/client";
+import { format } from "date-fns";
 
-
-interface Ingredient {
-  id: string;
-  name: string;
-  category: string | null;
-  unitUsage: string;
-  lastPurchasePrice: number;
-  averagePrice: number;
-  minStock: number;
-}
-
-interface IngredientActionButtonsProps {
-  ingredient: Ingredient; // Sesuaikan dengan tipe dari Prisma jika perlu
-}
-
-export function IngredientActionButtons({ ingredient }: IngredientActionButtonsProps) {
+export function ExpenseActionButtons({ expense }: { expense: Expense }) {
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Handle Edit
   async function handleEdit(formData: FormData) {
     setLoading(true);
     const data = {
       name: formData.get("name") as string,
-      category: formData.get("category") as string,
-      unitUsage: formData.get("unitUsage") as string,
-      minStock: parseFloat(formData.get("minStock") as string),
-      lastPurchasePrice: parseInt(formData.get("lastPurchasePrice") as string),
+      amount: formData.get("amount") as string,
+      category: formData.get("category") as ExpenseCategory,
+      date: formData.get("date") as string,
+      note: formData.get("note") as string,
     };
 
-    const result = await updateIngredient(ingredient.id, data);
+    const result = await updateExpense(expense.id, data);
     setLoading(false);
 
     if (result.success) {
-      toast.success("Bahan baku berhasil diperbarui");
+      toast.success("Catatan berhasil diperbarui");
       setShowEditDialog(false);
     } else {
       toast.error(result.error);
     }
   }
 
-  // Handle Delete
   async function handleDelete() {
     setLoading(true);
-    const result = await deleteIngredient(ingredient.id);
+    const result = await deleteExpense(expense.id);
     setLoading(false);
 
     if (result.success) {
-      toast.success("Bahan baku berhasil dihapus");
+      toast.success("Catatan berhasil dihapus");
       setShowDeleteDialog(false);
     } else {
       toast.error(result.error);
@@ -105,25 +90,25 @@ export function IngredientActionButtons({ ingredient }: IngredientActionButtonsP
         </DropdownMenuTrigger>
         <DropdownMenuContent
           align="end"
-          // Ukuran lebar disesuaikan (min-w-[180px]), glassmorphism, dan shadow tebal
+          // Menyesuaikan ukuran lebar (min-w-[180px]) dan padding yang lebih lega
           className="rounded-3xl border-white/60 bg-white/80 backdrop-blur-2xl shadow-[0_20px_50px_rgba(0,0,0,0.1)] p-2 min-w-45 animate-in fade-in zoom-in duration-200"
         >
           <DropdownMenuItem
             onClick={() => setShowEditDialog(true)}
-            // Style identik dengan halaman produk: font black, text-cyan, icon tebal
+            // Menggunakan font-bold, text-cyan untuk edit (sesuai gambar produk), dan padding lebih besar
             className="flex items-center gap-3 py-3 px-4 text-[11px] font-black uppercase tracking-tight text-cyan-600 focus:text-cyan-700 focus:bg-cyan-50/80 cursor-pointer rounded-2xl transition-all duration-300"
           >
             <Edit className="h-4 w-4 stroke-3" />
-            Edit Bahan
+            Edit Data
           </DropdownMenuItem>
 
           <DropdownMenuItem
             onClick={() => setShowDeleteDialog(true)}
-            // Style identik: text-red, font black, hover bg-red-50
+            // Warna merah untuk hapus, font bold, dan alignment yang sama
             className="flex items-center gap-3 py-3 px-4 text-[11px] font-black uppercase tracking-tight text-red-500 focus:text-red-600 focus:bg-red-50/80 cursor-pointer rounded-2xl transition-all duration-300"
           >
             <Trash2 className="h-4 w-4 stroke-3" />
-            Hapus Bahan
+            Hapus Catatan
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -133,51 +118,43 @@ export function IngredientActionButtons({ ingredient }: IngredientActionButtonsP
         <DialogContent className="sm:max-w-106.25 rounded-3xl">
           <form action={handleEdit}>
             <DialogHeader>
-              <DialogTitle className="font-black text-2xl">Edit Bahan</DialogTitle>
-              <DialogDescription>Perbarui informasi bahan baku.</DialogDescription>
+              <DialogTitle className="font-black text-2xl flex items-center gap-3">
+                <Receipt className="h-6 w-6 text-cyan-600" />
+                Edit Biaya
+              </DialogTitle>
+              <DialogDescription>Perbarui informasi pengeluaran operasional.</DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
-                <Label htmlFor="name">Nama Bahan</Label>
-                <Input id="name" name="name" defaultValue={ingredient.name} required className="rounded-xl" />
+                <Label htmlFor="name">Nama Pengeluaran</Label>
+                <Input id="name" name="name" defaultValue={expense.name} required className="rounded-xl" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
                   <Label htmlFor="category">Kategori</Label>
-                  <Select name="category" defaultValue={ingredient.category ?? undefined}>
+                  <Select name="category" defaultValue={expense.category}>
                     <SelectTrigger className="rounded-xl">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Main">Main Ingredients</SelectItem>
-                      <SelectItem value="Packaging">Packaging</SelectItem>
-                      <SelectItem value="Consumables">Consumables</SelectItem>
+                      {Object.values(ExpenseCategory).map((cat) => (
+                        <SelectItem key={cat} value={cat}>{cat.replace("_", " ")}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="unitUsage">Satuan Pakai</Label>
-                  <Select name="unitUsage" defaultValue={ingredient.unitUsage ?? undefined}>
-                    <SelectTrigger className="rounded-xl">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="gram">Gram (gr)</SelectItem>
-                      <SelectItem value="ml">Mililiter (ml)</SelectItem>
-                      <SelectItem value="pcs">Pieces (pcs)</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Label htmlFor="date">Tanggal</Label>
+                  <Input id="date" name="date" type="date" defaultValue={format(new Date(expense.date), "yyyy-MM-dd")} required className="rounded-xl" />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="lastPurchasePrice">Harga Beli</Label>
-                  <Input id="lastPurchasePrice" name="lastPurchasePrice" type="number" defaultValue={ingredient.lastPurchasePrice} required className="rounded-xl" />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="minStock">Batas Minim</Label>
-                  <Input id="minStock" name="minStock" type="number" defaultValue={ingredient.minStock} required className="rounded-xl" />
-                </div>
+              <div className="grid gap-2">
+                <Label htmlFor="amount">Nominal (Rp)</Label>
+                <Input id="amount" name="amount" type="number" defaultValue={expense.amount} required className="rounded-xl" />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="note">Catatan</Label>
+                <Input id="note" name="note" defaultValue={expense.note || ""} className="rounded-xl" />
               </div>
             </div>
             <DialogFooter>
@@ -193,9 +170,9 @@ export function IngredientActionButtons({ ingredient }: IngredientActionButtonsP
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent className="rounded-3xl">
           <AlertDialogHeader>
-            <AlertDialogTitle className="font-black text-xl text-red-600">Hapus Bahan Baku?</AlertDialogTitle>
+            <AlertDialogTitle className="font-black text-xl text-red-600">Hapus Catatan Biaya?</AlertDialogTitle>
             <AlertDialogDescription>
-              Tindakan ini tidak dapat dibatalkan. Menghapus <strong>{ingredient.name}</strong> akan berpengaruh pada resep produk yang menggunakan bahan ini.
+              Tindakan ini tidak dapat dibatalkan. Menghapus catatan <strong>{expense.name}</strong> akan mempengaruhi laporan keuangan total.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -208,7 +185,7 @@ export function IngredientActionButtons({ ingredient }: IngredientActionButtonsP
               className="bg-red-600 hover:bg-red-700 text-white rounded-xl"
               disabled={loading}
             >
-              {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : "Ya, Hapus Bahan"}
+              {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : "Ya, Hapus Catatan"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

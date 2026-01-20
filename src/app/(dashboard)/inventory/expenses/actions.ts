@@ -3,24 +3,36 @@
 import { prisma as db } from "@/lib/prisma";
 import { ExpenseCategory } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 
-// 1. Fungsi untuk menambah biaya operasional baru
-export async function createExpense(data: {
+// Skema Validasi tetap sama
+const ExpenseSchema = z.object({
+  name: z.string().min(3, "Nama pengeluaran minimal 3 karakter"),
+  amount: z.number().min(1, "Nominal harus lebih dari 0"),
+  category: z.nativeEnum(ExpenseCategory),
+  date: z.date(),
+  note: z.string().optional().nullable(),
+});
+
+// Define interface untuk input agar tidak pakai 'any'
+interface RawExpenseInput {
   name: string;
-  amount: number;
+  amount: string | number;
   category: ExpenseCategory;
-  date: Date;
-  note?: string;
-}) {
+  date: string | Date;
+  note?: string | null;
+}
+
+export async function createExpense(rawDate: RawExpenseInput) {
   try {
+    const validatedData = ExpenseSchema.parse({
+      ...rawDate,
+      date: new Date(rawDate.date),
+      amount: Number(rawDate.amount),
+    });
+
     const expense = await db.expense.create({
-      data: {
-        name: data.name,
-        amount: data.amount,
-        category: data.category,
-        date: data.date,
-        note: data.note,
-      },
+      data: validatedData,
     });
 
     revalidatePath("/dashboard");
@@ -28,12 +40,18 @@ export async function createExpense(data: {
     
     return { success: true, data: expense };
   } catch (error) {
+    if (error instanceof z.ZodError) {
+      // Ambil pesan error pertama dari array issues secara eksplisit
+      const firstIssue = error.issues[0];
+      const errorMessage = firstIssue ? firstIssue.message : "Validasi gagal";
+      
+      return { success: false, error: errorMessage };
+    }
     console.error("CREATE_EXPENSE_ERROR:", error);
     return { success: false, error: "Gagal mencatat biaya operasional" };
   }
 }
 
-// 2. Fungsi untuk mengambil daftar biaya dengan filter (optional)
 export async function getExpenses(params?: {
   startDate?: Date;
   endDate?: Date;
@@ -60,7 +78,6 @@ export async function getExpenses(params?: {
   }
 }
 
-// 3. Fungsi untuk menghapus catatan biaya
 export async function deleteExpense(id: string) {
   try {
     await db.expense.delete({
@@ -77,17 +94,28 @@ export async function deleteExpense(id: string) {
   }
 }
 
-// 4. Fungsi ringkasan untuk Dashboard
-export async function getExpenseSummary() {
+// ... (kode sebelumnya tetap ada)
+
+export async function updateExpense(id: string, rawData: RawExpenseInput) {
   try {
-    const total = await db.expense.aggregate({
-      _sum: {
-        amount: true,
-      },
+    const validatedData = ExpenseSchema.parse({
+      ...rawData,
+      date: new Date(rawData.date),
+      amount: Number(rawData.amount),
     });
 
-    return { success: true, total: total._sum.amount || 0 };
-  } catch  {
-    return { success: false, total: 0 };
+    const expense = await db.expense.update({
+      where: { id },
+      data: validatedData,
+    });
+
+    revalidatePath("/inventory/expenses");
+    return { success: true, data: expense };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      const firstIssue = error.issues[0];
+      return { success: false, error: firstIssue ? firstIssue.message : "Validasi gagal" };
+    }
+    return { success: false, error: "Gagal memperbarui data" };
   }
 }

@@ -1,12 +1,10 @@
-"use client";
-
-import { LucideIcon } from "lucide-react";
+import { ElementType, ReactNode } from "react";
 
 interface PremiumHeaderProps {
-  icon: LucideIcon;
+  icon: ElementType;
   title: string;
   subtitle: string;
-  actions?: React.ReactNode;
+  actions?: ReactNode;
 }
 
 export function PremiumHeader({ icon: Icon, title, subtitle, actions }: PremiumHeaderProps) {
@@ -15,7 +13,7 @@ export function PremiumHeader({ icon: Icon, title, subtitle, actions }: PremiumH
       <div className="space-y-1.5">
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-2xl bg-slate-900 flex items-center justify-center text-white shadow-lg shadow-slate-200">
-            <Icon size={20} />
+            {Icon && <Icon size={20} />}
           </div>
           <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase italic">
             {title}

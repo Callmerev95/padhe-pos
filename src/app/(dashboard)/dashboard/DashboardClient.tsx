@@ -55,6 +55,7 @@ export default function DashboardClient({ initialOrders, lowStockItems, profitDa
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     if (!url || !key) return null;
+
     return createClient(url, key);
   }, []);
 
@@ -284,12 +285,21 @@ export default function DashboardClient({ initialOrders, lowStockItems, profitDa
                 <AreaChart data={stats.chartData}>
                   <defs>
                     <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2} />
-                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                      <stop
+                        offset="5%"
+                        stopColor="#3b82f6"
+                        stopOpacity={0.2} />
+                      <stop
+                        offset="95%"
+                        stopColor="#3b82f6"
+                        stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#cbd5e1" />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 600, fill: '#94a3b8' }} dy={15} />
+                  <XAxis dataKey="name"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 12, fontWeight: 600, fill: '#94a3b8' }} dy={15} />
                   <YAxis axisLine={false} tickLine={false} domain={stats.yAxisDomain} tick={{ fontSize: 12, fontWeight: 600, fill: '#94a3b8' }} tickFormatter={(val) => val > 0 ? `${(val / 1000).toFixed(0)}k` : '0'} />
                   <Tooltip
                     contentStyle={{ borderRadius: '20px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '12px 16px' }}
@@ -298,7 +308,13 @@ export default function DashboardClient({ initialOrders, lowStockItems, profitDa
                       return [`Rp ${Number(value).toLocaleString()}`, "Revenue"];
                     }}
                   />
-                  <Area type="monotone" dataKey="revenue" stroke="#3b82f6" strokeWidth={4} fillOpacity={1} fill="url(#colorRev)" connectNulls={true} dot={{ r: 4, fill: '#3b82f6', strokeWidth: 2, stroke: '#fff' }} animationDuration={1500} />
+                  <Area
+                    type="monotone"
+                    dataKey="revenue"
+                    stroke="#3b82f6"
+                    strokeWidth={4}
+                    fillOpacity={1} fill="url(#colorRev)"
+                    connectNulls={true} dot={{ r: 4, fill: '#3b82f6', strokeWidth: 2, stroke: '#fff' }} animationDuration={1500} />
                 </AreaChart>
               </ResponsiveContainer>
             </div>

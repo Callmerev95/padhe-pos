@@ -24,7 +24,11 @@ interface CreateOrderParams {
 }
 
 // 1. Fungsi internal untuk memotong stok (Safe & Robust)
-async function processStockDeduction(tx: Prisma.TransactionClient, items: OrderItem[], orderId: string) {
+async function processStockDeduction(
+  tx: Prisma.TransactionClient,
+  items: OrderItem[],
+  orderId: string,
+) {
   for (const item of items) {
     try {
       // Cari resep berdasarkan productId (item.id)
@@ -67,37 +71,42 @@ async function processStockDeduction(tx: Prisma.TransactionClient, items: OrderI
 // 2. Fungsi Utama Sync
 export async function syncOrderToCloud(data: CreateOrderParams) {
   try {
-    const result = await prisma.$transaction(async (tx) => {
-      // Simpan Order
-      const order = await tx.order.create({
-        data: {
-          id: data.id,
-          createdAt: new Date(data.createdAt),
-          total: data.total,
-          paid: data.paid,
-          paymentMethod: data.paymentMethod,
-          customerName: data.customerName,
-          orderType: data.orderType,
-          items: data.items as unknown as Prisma.InputJsonValue, 
-        },
-      });
+    const result = await prisma.$transaction(
+      async (tx) => {
+        // Simpan Order
+        const order = await tx.order.create({
+          data: {
+            id: data.id,
+            createdAt: new Date(data.createdAt),
+            total: data.total,
+            paid: data.paid,
+            paymentMethod: data.paymentMethod,
+            customerName: data.customerName,
+            orderType: data.orderType,
+            items: data.items as unknown as Prisma.InputJsonValue,
+          },
+        });
 
-      // Jalankan Potong Stok
-      await processStockDeduction(tx, data.items, data.id);
+        // Jalankan Potong Stok
+        await processStockDeduction(tx, data.items, data.id);
 
-      return order;
-    }, {
-      maxWait: 5000,
-      timeout: 20000, // Memberikan napas 20 detik agar tidak timeout lagi
-    });
+        return order;
+      },
+      {
+        maxWait: 5000,
+        timeout: 20000, // Memberikan napas 20 detik agar tidak timeout lagi
+      },
+    );
 
     revalidatePath("/");
     revalidatePath("/order");
     revalidatePath("/inventory/ingredients");
-    
+
     return { success: true, data: result };
-  } catch (error) { // Hapus ': any' di sini
-    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
+  } catch (error) {
+    // Hapus ': any' di sini
+    const errorMessage =
+      error instanceof Error ? error.message : "An unknown error occurred";
     console.error("CRITICAL_SYNC_ERROR:", error);
     return { success: false, error: errorMessage };
   }
@@ -106,36 +115,39 @@ export async function syncOrderToCloud(data: CreateOrderParams) {
 // 3. Fungsi Bulk Sync (Jika dibutuhkan)
 export async function syncBulkOrders(orders: CreateOrderParams[]) {
   try {
-    const results = await prisma.$transaction(async (tx) => {
-      const processedOrders = [];
+    const results = await prisma.$transaction(
+      async (tx) => {
+        const processedOrders = [];
 
-      for (const order of orders) {
-        const existingOrder = await tx.order.findUnique({
-          where: { id: order.id }
-        });
-
-        if (!existingOrder) {
-          const created = await tx.order.create({
-            data: {
-              id: order.id,
-              customerName: order.customerName,
-              total: order.total,
-              paid: order.paid,
-              paymentMethod: order.paymentMethod,
-              orderType: order.orderType,
-              items: order.items as unknown as Prisma.InputJsonValue,
-              createdAt: new Date(order.createdAt),
-            },
+        for (const order of orders) {
+          const existingOrder = await tx.order.findUnique({
+            where: { id: order.id },
           });
 
-          await processStockDeduction(tx, order.items, order.id);
-          processedOrders.push(created);
+          if (!existingOrder) {
+            const created = await tx.order.create({
+              data: {
+                id: order.id,
+                customerName: order.customerName,
+                total: order.total,
+                paid: order.paid,
+                paymentMethod: order.paymentMethod,
+                orderType: order.orderType,
+                items: order.items as unknown as Prisma.InputJsonValue,
+                createdAt: new Date(order.createdAt),
+              },
+            });
+
+            await processStockDeduction(tx, order.items, order.id);
+            processedOrders.push(created);
+          }
         }
-      }
-      return processedOrders;
-    }, {
-      timeout: 30000 // Bulk biasanya lebih lama, kasih 30 detik
-    });
+        return processedOrders;
+      },
+      {
+        timeout: 30000, // Bulk biasanya lebih lama, kasih 30 detik
+      },
+    );
 
     revalidatePath("/");
     revalidatePath("/inventory/ingredients");
@@ -143,5 +155,17 @@ export async function syncBulkOrders(orders: CreateOrderParams[]) {
   } catch (error) {
     console.error("Bulk Sync Error:", error);
     return { success: false };
+  }
+}
+
+export async function getOrdersFromCloud() {
+  try {
+    const orders = await prisma.order.findMany({
+      orderBy: { createdAt: "desc" },
+    });
+    return { success: true, data: orders };
+  } catch (error) {
+    console.error("Fetch Orders Error:", error);
+    return { success: false, error: "Gagal Mengambil data Cloud" };
   }
 }

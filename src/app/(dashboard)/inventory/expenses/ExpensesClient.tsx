@@ -1,205 +1,126 @@
 "use client";
 
-import { useState } from "react";
-import { Plus, Trash2, Receipt } from "lucide-react"; // Hapus Calendar, Tag, FileText
-import { motion } from "framer-motion";
+import { useState, useMemo, useEffect } from "react";
+import { Wallet, Search } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
 import { id } from "date-fns/locale";
-import { createExpense, deleteExpense } from "./actions";
-import { ExpenseCategory, type Expense } from "@prisma/client"; // Pakai type dari Prisma
-import { toast } from "sonner";
-
-
+import { type Expense } from "@prisma/client";
+import { PremiumHeader } from "@/components/shared/header/PremiumHeader";
+import { OrderFooter } from "@/components/shared/order/OrderFooter";
+import { CreditNote } from "@/components/shared/order/CreditNote";
+import { CreateExpenseDialog } from "./CreateExpenseDialog";
+import { ExpenseActionButtons } from "./ExpenseActionButtons";
 
 export default function ExpensesClient({ initialData }: { initialData: Expense[] }) {
-  const [expenses, setExpenses] = useState<Expense[]>(initialData);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+    const [mounted, setMounted] = useState(false);
+    const [searchTerm, setSearchTerm] = useState("");
 
-  const [formData, setFormData] = useState({
-    name: "",
-    amount: "",
-    category: "OPERASIONAL" as ExpenseCategory,
-    date: format(new Date(), "yyyy-MM-dd"),
-    note: "",
-  });
+    useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setMounted(true);
+    }, []);
 
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
+    const filteredExpenses = useMemo(() => {
+        return initialData.filter(e =>
+            e.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            e.category.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+    }, [initialData, searchTerm]);
 
-    const res = await createExpense({
-      ...formData,
-      amount: parseInt(formData.amount),
-      date: new Date(formData.date),
-    });
+    const totalAmount = useMemo(() => {
+        return filteredExpenses.reduce((acc, curr) => acc + curr.amount, 0);
+    }, [filteredExpenses]);
 
-    if (res.success && res.data) {
-      // Hilangkan 'as any', casting ke Expense
-      setExpenses([(res.data as Expense), ...expenses]);
-      setIsModalOpen(false);
-      setFormData({ 
-        name: "", 
-        amount: "", 
-        category: "OPERASIONAL", 
-        date: format(new Date(), "yyyy-MM-dd"), 
-        note: "" 
-      });
-      toast.success("Biaya operasional berhasil dicatat!");
-    } else {
-      toast.error("Gagal menyimpan data");
-    }
-    setIsLoading(false);
-  };
+    if (!mounted) return null;
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Hapus catatan ini?")) return;
-    const res = await deleteExpense(id);
-    if (res.success) {
-      setExpenses(expenses.filter((e) => e.id !== id));
-      toast.success("Catatan dihapus");
-    }
-  };
-
-  return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Update rounded-4xl sesuai saran tailwind-intellisense */}
-        <div className="bg-slate-900 rounded-4xl p-6 text-white">
-          <p className="text-[10px] font-bold uppercase tracking-widest opacity-60">Total Pengeluaran</p>
-          <h3 className="text-3xl font-black mt-1 text-amber-400">
-            Rp {expenses.reduce((acc, curr) => acc + curr.amount, 0).toLocaleString()}
-          </h3>
-        </div>
-        <div className="md:col-span-2 flex items-center justify-end">
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-3 bg-slate-900 hover:bg-black text-white px-8 py-4 rounded-2xl font-black text-xs transition-all shadow-xl shadow-slate-200"
-          >
-            <Plus className="w-5 h-5" />
-            CATAT PENGELUARAN BARU
-          </button>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-[2.5rem] border border-slate-100 overflow-hidden shadow-sm">
-        <table className="w-full text-left">
-          <thead>
-            <tr className="bg-slate-50/50 border-b border-slate-100 text-[10px] font-black uppercase tracking-widest text-slate-400">
-              <th className="px-8 py-5">Tanggal</th>
-              <th className="px-8 py-5">Nama Biaya</th>
-              <th className="px-8 py-5">Kategori</th>
-              <th className="px-8 py-5 text-right">Nominal</th>
-              <th className="px-8 py-5 text-center">Aksi</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-50">
-            {expenses.map((expense) => (
-              <motion.tr layout key={expense.id} className="hover:bg-slate-50/50 transition-colors group">
-                <td className="px-8 py-5 text-xs font-bold text-slate-500">
-                  {format(new Date(expense.date), "dd MMM yyyy", { locale: id })}
-                </td>
-                <td className="px-8 py-5">
-                  <p className="text-sm font-black text-slate-900 uppercase">{expense.name}</p>
-                  {expense.note && <p className="text-[10px] text-slate-400 font-medium italic">{expense.note}</p>}
-                </td>
-                <td className="px-8 py-5">
-                  <span className="inline-flex items-center px-3 py-1 rounded-lg bg-slate-100 text-[10px] font-black text-slate-600 uppercase">
-                    {expense.category.replace("_", " ")}
-                  </span>
-                </td>
-                <td className="px-8 py-5 text-right font-black text-sm text-red-600">
-                  Rp {expense.amount.toLocaleString()}
-                </td>
-                <td className="px-8 py-5 text-center">
-                  <button
-                    onClick={() => handleDelete(expense.id)}
-                    className="p-2 text-slate-300 hover:text-red-600 transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </td>
-              </motion.tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {isModalOpen && (
-        // Update z-100 sesuai saran tailwind-intellisense
-        <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-white w-full max-w-lg rounded-[2.5rem] p-8 shadow-2xl"
-          >
-            <h3 className="text-2xl font-black uppercase mb-6 flex items-center gap-3">
-               <Receipt className="w-6 h-6" /> CATAT BIAYA
-            </h3>
-            <form onSubmit={handleCreate} className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase text-slate-400 px-1">Nama Pengeluaran</label>
-                <input
-                  required
-                  placeholder="Misal: Tagihan Listrik Januari"
-                  className="w-full px-5 py-3 rounded-xl border border-slate-100 bg-slate-50 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-slate-900"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+    return (
+        <div className="flex flex-col h-[calc(100vh-180px)] gap-4 animate-in fade-in duration-700 overflow-hidden pr-2">
+            <div className="shrink-0 flex flex-col gap-2">
+                <PremiumHeader
+                    icon={Wallet}
+                    title="BIAYA OPERASIONAL"
+                    subtitle="KELOLA DAN CATAT PENGELUARAN DILUAR BAHAN BAKU"
+                    actions={<CreateExpenseDialog />}
                 />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 px-1">Nominal (Rp)</label>
-                  <input
-                    required
-                    type="number"
-                    className="w-full px-5 py-3 rounded-xl border border-slate-100 bg-slate-50 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-slate-900"
-                    value={formData.amount}
-                    onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                  />
+
+                <div className="bg-white/60 backdrop-blur-md p-2 rounded-[2.5rem] border border-white shadow-xl shadow-slate-200/30 flex items-center justify-between px-6 h-14">
+                    <div className="flex items-center gap-4 flex-1">
+                        <div className="relative flex-1 max-w-md">
+                            <Search className="absolute left-6 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                            <input 
+                                type="text"
+                                placeholder="Cari biaya atau kategori..."
+                                className="w-full pl-12 pr-6 py-2 bg-slate-100/50 border-none rounded-xl text-[11px] font-bold focus:ring-2 focus:ring-cyan-500 transition-all placeholder:text-slate-400 h-auto"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-8 pr-4">
+                        <div className="text-right">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">Total Terfilter</p>
+                            <p className="text-[13px] font-black text-red-600 tabular-nums mt-0.5">Rp {totalAmount.toLocaleString()}</p>
+                        </div>
+                    </div>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 px-1">Tanggal</label>
-                  <input
-                    required
-                    type="date"
-                    className="w-full px-5 py-3 rounded-xl border border-slate-100 bg-slate-50 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-slate-900"
-                    value={formData.date}
-                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                  />
+            </div>
+
+            <div className="flex-1 min-h-0 flex flex-col bg-white rounded-[3rem] border border-slate-100 shadow-2xl shadow-slate-200/50 overflow-hidden transition-all duration-500 hover:border-cyan-100">
+                <div className="flex-1 overflow-y-auto custom-scrollbar relative bg-[#fafbfc] pb-12">
+                    <table className="w-full text-sm border-separate border-spacing-0">
+                        <thead>
+                            <tr>
+                                <th className="sticky top-0 z-30 bg-[#f8fafc] px-8 py-4 text-left font-black text-slate-500 uppercase tracking-wider text-[10px] border-b border-slate-200">Tanggal</th>
+                                <th className="sticky top-0 z-30 bg-[#f8fafc] px-6 py-4 text-left font-black text-slate-500 uppercase tracking-wider text-[10px] border-b border-slate-200">Nama Pengeluaran</th>
+                                <th className="sticky top-0 z-30 bg-[#f8fafc] px-6 py-4 text-center font-black text-slate-500 uppercase tracking-wider text-[10px] border-b border-slate-200">Kategori</th>
+                                <th className="sticky top-0 z-30 bg-[#f8fafc] px-6 py-4 text-right font-black text-slate-500 uppercase tracking-wider text-[10px] border-b border-slate-200">Nominal</th>
+                                <th className="sticky top-0 z-30 bg-[#f8fafc] px-8 py-4 text-right font-black text-slate-500 uppercase tracking-wider text-[10px] border-b border-slate-200">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50">
+                            <AnimatePresence mode="popLayout">
+                                {filteredExpenses.map((expense) => (
+                                    <motion.tr 
+                                        layout
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        exit={{ opacity: 0 }}
+                                        key={expense.id} 
+                                        className="group transition-all duration-500 relative bg-white hover:z-20 hover:shadow-[0_0_25px_rgba(34,211,238,0.15),0_10px_15px_-3px_rgba(0,0,0,0.05)]"
+                                    >
+                                        <td className="px-8 py-5 relative">
+                                            <div className="absolute inset-y-0 left-0 w-1 bg-cyan-500 scale-y-0 group-hover:scale-y-100 transition-transform duration-500 origin-center" />
+                                            <span className="text-[11px] font-black text-slate-400 uppercase tabular-nums">
+                                                {format(new Date(expense.date), "dd MMM yyyy", { locale: id })}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-5">
+                                            <p className="text-sm font-black text-slate-700 uppercase group-hover:text-cyan-600 transition-colors mb-0.5">{expense.name}</p>
+                                            {expense.note && <p className="text-[9px] text-slate-400 font-bold italic leading-none">{expense.note}</p>}
+                                        </td>
+                                        <td className="px-6 py-5 text-center">
+                                            <span className="inline-flex items-center px-3 py-0.5 rounded-xl text-[9px] font-black uppercase tracking-wider bg-slate-100 text-slate-500 group-hover:bg-slate-900 group-hover:text-white transition-all">
+                                                {expense.category.replace("_", " ")}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-5 text-right font-black text-sm text-red-600 tabular-nums">
+                                            <span className="text-[10px] text-slate-400 mr-1 font-bold">Rp</span>
+                                            {expense.amount.toLocaleString()}
+                                        </td>
+                                        <td className="px-8 py-5 text-right">
+                                            <ExpenseActionButtons expense={expense} />
+                                        </td>
+                                    </motion.tr>
+                                ))}
+                            </AnimatePresence>
+                        </tbody>
+                    </table>
                 </div>
-              </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase text-slate-400 px-1">Kategori</label>
-                <select
-                  className="w-full px-5 py-3 rounded-xl border border-slate-100 bg-slate-50 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-slate-900 appearance-none"
-                  value={formData.category}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value as ExpenseCategory })}
-                >
-                  {Object.values(ExpenseCategory).map((cat) => (
-                    <option key={cat} value={cat}>{cat.replace("_", " ")}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="flex-1 px-6 py-4 rounded-xl font-black text-xs uppercase text-slate-400 hover:bg-slate-50 transition-all"
-                >
-                  Batal
-                </button>
-                <button
-                  disabled={isLoading}
-                  className="flex-1 px-6 py-4 rounded-xl font-black text-xs uppercase bg-slate-900 text-white hover:bg-black transition-all disabled:opacity-50 shadow-xl shadow-slate-200"
-                >
-                  {isLoading ? "Menyimpan..." : "Simpan Data"}
-                </button>
-              </div>
-            </form>
-          </motion.div>
+                <OrderFooter count={filteredExpenses.length} label="Total Catatan Biaya" />
+            </div>
+
+            <CreditNote />
         </div>
-      )}
-    </div>
-  );
+    );
 }
