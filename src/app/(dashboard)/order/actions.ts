@@ -192,14 +192,41 @@ export async function updateOrderStatus(
 
 export async function getKitchenOrders() {
   try {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    // 1. Ambil data dari Database
     const orders = await prisma.order.findMany({
       where: {
-        status: { in: ["PENDING", "PREPARING"] },
+        // Kita hanya ambil status yang berpotensi masih butuh tindakan koki
+        status: { in: [OrderStatus.PENDING, OrderStatus.PREPARING, OrderStatus.COMPLETED] },
+        createdAt: { gte: startOfToday }
       },
       orderBy: { createdAt: "asc" },
     });
-    return { success: true, data: orders };
-  } catch {
+
+    // 2. Filter logic untuk membersihkan layar KDS
+    const activeOrders = orders.filter((order) => {
+      // Jika statusnya sudah READY, koki sudah klik "Siap Saji", jadi tidak perlu muncul lagi
+      if (order.status === OrderStatus.READY) return false;
+
+      // Type-safe conversion untuk items
+      const items = (order.items as unknown as OrderItem[]) || [];
+      const allItemsDone = items.length > 0 && items.every((item: OrderItem) => item.isDone);
+
+      // Jika statusnya COMPLETED (sudah dibayar) DAN koki sudah mencentang semua item,
+      // artinya ini orderan yang sudah selesai diproses dapur. Sembunyikan.
+      if (order.status === OrderStatus.COMPLETED && allItemsDone) {
+        return false;
+      }
+
+      // Sisanya (PENDING, PREPARING, atau COMPLETED yang belum kelar centang) tetap tampil
+      return true;
+    });
+
+    return { success: true, data: activeOrders };
+  } catch (error) {
+    console.error("KITCHEN_FETCH_ERROR:", error);
     return { success: false, error: "Gagal ambil antrian dapur" };
   }
 }

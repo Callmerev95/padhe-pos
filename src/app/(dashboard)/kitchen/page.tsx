@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { PremiumHeader } from "@/components/shared/header/PremiumHeader";
-import { ChefHat, CheckCircle2, PlayCircle, BellRing, MessageSquareQuote, Coffee, Pizza, LayoutGrid, Check, Clock } from "lucide-react";
+import { ChefHat, CheckCircle2, BellRing, MessageSquareQuote, Coffee, Pizza, LayoutGrid, Check, Clock } from "lucide-react";
 import { type OrderItem } from "@/lib/db";
 import { getKitchenOrders, updateOrderStatus, updateItemStatus } from "../order/actions";
 import { toast } from "sonner";
@@ -132,24 +132,16 @@ export default function KitchenPage() {
     }
   };
 
-  const handleStatusChange = async (id: string, nextStatus: OrderStatus) => {
+  const handleStatusChange = async (id: string) => {
     const order = orders.find(o => o.id === id);
     if (!order) return;
 
-    // 🚨 LOGIKA: Paksa koki hanya bisa sampai READY. COMPLETED hanya milik POS.
-    const targetStatus = nextStatus === OrderStatus.COMPLETED ? OrderStatus.READY : nextStatus;
-
-    if (targetStatus === OrderStatus.READY) {
-      const allItemsDone = order.items.every(i => i.isDone);
-      if (!allItemsDone) {
-        toast.error("Masih ada item yang belum kelar dicentang!");
-        return;
-      }
-    }
+    // Jika sudah bayar (COMPLETED), biarkan tetap COMPLETED. Jika belum, set ke READY.
+    const targetStatus = order.status === OrderStatus.COMPLETED ? OrderStatus.COMPLETED : OrderStatus.READY;
 
     const res = await updateOrderStatus(id, targetStatus);
     if (res.success) {
-      toast.success(targetStatus === OrderStatus.READY ? "Pesanan Siap disajikan!" : "Memulai proses masak");
+      toast.success("Pesanan telah diselesaikan!");
       fetchOrders();
     } else {
       toast.error(res.error || "Gagal update status");
@@ -204,9 +196,6 @@ export default function KitchenPage() {
                     <span className="text-[9px] font-bold text-slate-400 tracking-widest">#{order.id.slice(-6).toUpperCase()}</span>
                   </div>
                   <div className="flex flex-col items-end gap-1">
-                    {order.items.filter(i => station === "ALL" || i.categoryType === station).every(i => i.isDone) && (
-                      <span className="text-[7px] bg-green-100 text-green-600 px-2 py-0.5 rounded-md font-black italic animate-bounce">STATION DONE</span>
-                    )}
                     <div className={cn("px-3 py-1 rounded-full text-[8px] font-black uppercase", order.status === OrderStatus.PREPARING ? 'bg-orange-500 text-white animate-pulse' : 'bg-slate-100')}>{order.status}</div>
                   </div>
                 </div>
@@ -214,11 +203,11 @@ export default function KitchenPage() {
                 <div className="flex-1 overflow-y-auto pr-1 mb-6 space-y-3 custom-scrollbar min-h-0">
                   {order.items
                     .filter(item => station === "ALL" || item.categoryType === station)
-                    .map((item) => {
+                    .map((item, idx) => {
                       const originalIdx = order.items.findIndex(i => i.id === item.id);
                       return (
                         <div
-                          key={`${order.id}-${item.id}`}
+                          key={`${order.id}-${item.id}-${idx}`}
                           onClick={() => toggleItemDone(order.id, originalIdx, item.isDone)}
                           className={cn(
                             "flex flex-col p-3 rounded-xl border transition-all cursor-pointer select-none",
@@ -248,22 +237,39 @@ export default function KitchenPage() {
                     })}
                 </div>
 
+                {/* AREA BUTTON DINAMIS */}
                 <div className="flex gap-2 shrink-0 mt-auto">
-                  {order.status === OrderStatus.PENDING && (
-                    <button onClick={() => handleStatusChange(order.id, OrderStatus.PREPARING)} className="flex-1 bg-orange-500 text-white py-4 rounded-2xl text-[10px] font-black uppercase flex items-center justify-center gap-2 shadow-md">
-                      <PlayCircle size={18} /> Masak
-                    </button>
-                  )}
-                  {order.status === OrderStatus.PREPARING && (
-                    <button onClick={() => handleStatusChange(order.id, OrderStatus.READY)} className="flex-1 bg-green-500 text-white py-4 rounded-2xl text-[10px] font-black uppercase flex items-center justify-center gap-2 shadow-md">
-                      <CheckCircle2 size={18} /> {station === "ALL" ? "Siap Saji" : `Siap (${station})`}
-                    </button>
-                  )}
-                  {order.status === OrderStatus.READY && (
-                    <div className="flex-1 bg-slate-100 text-slate-400 py-4 rounded-2xl text-[10px] font-black uppercase flex items-center justify-center gap-2 border border-slate-200">
-                      <Clock size={18} /> Menunggu Kasir
-                    </div>
-                  )}
+                  {(() => {
+                    const stationItems = order.items.filter(item => station === "ALL" || item.categoryType === station);
+                    const allItemsDone = stationItems.length > 0 && stationItems.every(i => i.isDone);
+
+                    const isFinalized = order.status === OrderStatus.READY || (order.status === OrderStatus.COMPLETED && allItemsDone && !order.items.some(i => !i.isDone));
+
+                    if (isFinalized) {
+                      return (
+                        <div className="flex-1 bg-slate-100 text-slate-400 py-4 rounded-2xl text-[10px] font-black uppercase flex items-center justify-center gap-2 border border-slate-200">
+                          <CheckCircle2 size={18} className="text-green-500" /> Pesanan Selesai
+                        </div>
+                      );
+                    }
+
+                    if (allItemsDone) {
+                      return (
+                        <button
+                          onClick={() => handleStatusChange(order.id)}
+                          className="flex-1 bg-green-500 text-white py-4 rounded-2xl text-[10px] font-black uppercase flex items-center justify-center gap-2 shadow-md animate-in zoom-in duration-300"
+                        >
+                          <CheckCircle2 size={18} /> Tandai Siap Saji
+                        </button>
+                      );
+                    }
+
+                    return (
+                      <div className="flex-1 bg-orange-50 text-orange-400 py-4 rounded-2xl text-[10px] font-black uppercase flex items-center justify-center gap-2 border border-orange-100 border-dashed">
+                        <Clock size={18} /> Selesaikan Item
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             ))}
