@@ -140,6 +140,14 @@ enum StockLogType {
   ADJUSTMENT
 }
 
+enum OrderStatus {
+  PENDING    // Pesanan baru masuk (Antrian)
+  PREPARING  // Sedang dibuat oleh barista/koki
+  READY      // Sudah jadi, siap diambil/diantar
+  COMPLETED  // Sudah diterima pelanggan
+  CANCELLED  // Pesanan dibatalkan
+}
+
 enum ExpenseCategory {
   OPERASIONAL
   GAJI
@@ -157,8 +165,21 @@ model Order {
   paymentMethod String
   orderType     String
   items         Json     
+  status        OrderStatus @default(PENDING)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
   @@index([createdAt])
+  @@index([status])
+}
+
+model Printer {
+  id           String   @id @default("default_printer")
+  name         String   @default("Printer Kasir")
+  paperSize    Int      @default(58)
+  header       String?  @default("PADHE COFFEE")
+  address      String?  @default("Jl. Raya No. 123")
+  footer       String?  @default("Terima Kasih!")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }

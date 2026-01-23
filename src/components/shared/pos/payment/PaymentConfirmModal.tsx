@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useCartStore } from "@/store/useCartStore";
 import type { PaymentMethod } from "./payment.types";
@@ -29,10 +24,11 @@ export function PaymentConfirmModal({ open, onClose, onSuccess, method }: Props)
   const items = useCartStore((s) => s.items);
   const orderType = useCartStore((s) => s.orderType);
   const customerName = useCartStore((s) => s.customerName);
+  const activeOrderId = useCartStore((s) => s.activeOrderId);
   const setReceipt = useReceiptStore((s) => s.setReceipt);
 
   const [cashReceived, setCashReceived] = useState<number | "">("");
-  const [isProcessing, setIsProcessing] = useState(false); // Tambahkan state loading
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const paidAmount = typeof cashReceived === "number" ? cashReceived : subtotal;
   const change = typeof cashReceived === "number" ? cashReceived - subtotal : 0;
@@ -44,72 +40,68 @@ export function PaymentConfirmModal({ open, onClose, onSuccess, method }: Props)
     if (isProcessing) return;
     setIsProcessing(true);
 
-    const orderId = generateOrderId("POS-");
+    const orderId = activeOrderId && activeOrderId !== "" ? activeOrderId : generateOrderId("POS-");
     const createdAt = new Date().toISOString();
 
-    const formattedItems = items.map((i) => ({
-      id: i.productId,
-      name: i.name,
-      qty: i.qty,
-      price: i.price,
-      categoryType: i.categoryType,
-    }));
+    const formattedItems = items.map((i) => {
+      const itemWithStatus = i as unknown as { isDone?: boolean };
+      return {
+        id: i.productId,
+        name: i.name,
+        qty: i.qty,
+        price: i.price,
+        categoryType: i.categoryType,
+        notes: i.notes || "",
+        isDone: itemWithStatus.isDone === true,
+      };
+    });
 
     const orderData = {
       id: orderId,
       createdAt,
       total: subtotal,
-      paid: paidAmount,
+      paid: Number(paidAmount),
       paymentMethod: method,
       customerName: snapshotCustomerName,
       orderType: orderType as "Dine In" | "Take Away",
       items: formattedItems,
+      isSynced: false,
     };
 
-    // 1. Update UI Struk Segera
+    // 1. Simpan ke Receipt Store (Agar data tersedia di Success Modal)
     setReceipt({
-      orderId: orderId,
+      orderId,
       createdAt,
       items: formattedItems,
-      subtotal: subtotal,
+      subtotal,
       tax: 0,
       charge: 0,
       total: subtotal,
-      paid: paidAmount,
-      change: paidAmount - subtotal,
+      paid: Number(paidAmount),
+      change: Number(paidAmount) - subtotal,
       customerName: snapshotCustomerName,
       cashierName: "Revangga",
       orderType,
       paymentMethod: method,
     });
 
-    let syncSuccess = false;
-
-    // 2. Coba kirim ke Cloud TERLEBIH DAHULU
     try {
-      const response = await syncOrderToCloud(orderData);
-      // Periksa response success dari server action
-      syncSuccess = response?.success ?? false;
-      
-      if (syncSuccess) {
-        console.log("Cloud Sync & Stock Deduction Success!");
-      } else {
-        console.error("Cloud Sync failed on server side");
-      }
+      // 2. Proses Simpan & Sync
+      const response = await syncOrderToCloud(orderData, "COMPLETED");
+      await saveOrder({
+        ...orderData,
+        isSynced: response?.success ?? false
+      });
     } catch (err) {
-      console.error("Network Error, saving to local as pending", err);
-      syncSuccess = false;
+      console.error("Storage Error:", err);
+      // Tetap simpan lokal agar transaksi tidak hilang meski cloud gagal
+      await saveOrder({ ...orderData, isSynced: false });
+    } finally {
+      // 3. SELESAI
+      setIsProcessing(false);
+      onClose();
+      onSuccess();
     }
-
-    // 3. Simpan ke IndexedDB
-    await saveOrder({
-      ...orderData,
-      isSynced: syncSuccess
-    });
-
-    setIsProcessing(false);
-    onClose();
-    onSuccess();
   }
 
   return (
@@ -144,11 +136,11 @@ export function PaymentConfirmModal({ open, onClose, onSuccess, method }: Props)
         )}
 
         <Button
-          className="w-full h-12"
+          className="w-full h-12 shadow-md cursor-pointer"
           disabled={(method === "CASH" && !isCashEnough) || isProcessing}
           onClick={onConfirm}
         >
-          {isProcessing ? "Memproses..." : "Konfirmasi & Cetak"}
+          {isProcessing ? "Memproses..." : "Konfirmasi Pembayaran"}
         </Button>
       </DialogContent>
     </Dialog>

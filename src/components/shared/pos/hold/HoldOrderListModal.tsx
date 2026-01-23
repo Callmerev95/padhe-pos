@@ -19,28 +19,16 @@ type Props = {
 export function HoldOrderListModal({ open, onClose }: Props) {
   const holds = useHoldOrderStore((s) => s.holds);
   const resumeHold = useHoldOrderStore((s) => s.resumeHold);
-
-  const resetOrder = useCartStore((s) => s.resetOrder);
-  const setCustomerName = useCartStore((s) => s.setCustomerName);
-  const setOrderType = useCartStore((s) => s.setOrderType);
-  const addItem = useCartStore((s) => s.addItem);
+  
+  // ✅ Kita hanya butuh loadHoldToCart sekarang
+  const loadHoldToCart = useCartStore((s) => s.loadHoldToCart);
 
   function handleResume(id: string) {
     const hold = resumeHold(id);
     if (!hold) return;
 
-    resetOrder();
-    setCustomerName(hold.customerName || "");
-    setOrderType(hold.orderType);
-
-    hold.items.forEach((item) => {
-      addItem({
-        productId: item.productId,
-        name: item.name,
-        price: item.price,
-        categoryType: item.categoryType,
-      });
-    });
+    // ✅ LANGSUNG LOAD SEMUA: Ini otomatis set items, customerName, orderType, DAN activeOrderId
+    loadHoldToCart(hold);
 
     onClose();
   }

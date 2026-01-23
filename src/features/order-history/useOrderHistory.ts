@@ -8,16 +8,20 @@ import { getOrdersFromCloud } from "@/app/(dashboard)/order/actions";
 import { upsertOrdersFromCloud, OrderItem } from "@/lib/db";
 import * as XLSX from "xlsx";
 
+// ✅ Definisikan tipe data lokal yang mendukung status agar ESLint tidak marah
+interface OrderWithStatus extends LocalOrder {
+  status?: string;
+}
+
 export type OrderRecord = LocalOrder;
 
 export function useOrderHistory(options?: { allData?: boolean }) {
-  const [orders, setOrders] = useState<OrderRecord[]>([]);
+  // ✅ Gunakan tipe OrderWithStatus di sini
+  const [orders, setOrders] = useState<OrderWithStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
 
-  // Filter State
   const [search, setSearch] = useState("");
-  
   const [method, setMethod] = useState<string>("all");
   const [type, setType] = useState<string>("all");
 
@@ -30,56 +34,61 @@ export function useOrderHistory(options?: { allData?: boolean }) {
     setLoading(true);
     try {
       const cloudResponse = await getOrdersFromCloud();
-      
+
       if (cloudResponse.success && cloudResponse.data) {
-        // Normalisasi data: Konversi dari Prisma (Date) ke Lokal (String)
-        const normalizedOrders: LocalOrder[] = cloudResponse.data.map((order) => ({
-          id: order.id,
-          createdAt: order.createdAt.toISOString(), 
-          total: order.total,
-          paid: order.paid,
-          paymentMethod: order.paymentMethod as LocalOrder["paymentMethod"],
-          customerName: order.customerName || "Guest",
-          orderType: order.orderType as LocalOrder["orderType"],
-          // Sekarang OrderItem sudah dikenali karena sudah di-import
-          items: order.items as unknown as OrderItem[],
-          isSynced: true,
-        }));
-  
-        await upsertOrdersFromCloud(normalizedOrders);
+        // Normalisasi data dengan tipe OrderWithStatus
+        const normalizedOrders: OrderWithStatus[] = cloudResponse.data.map(
+          (order) => ({
+            id: order.id,
+            createdAt: order.createdAt.toISOString(),
+            total: order.total,
+            paid: order.paid,
+            paymentMethod: order.paymentMethod as LocalOrder["paymentMethod"],
+            customerName: order.customerName || "Guest",
+            orderType: order.orderType as LocalOrder["orderType"],
+            items: order.items as unknown as OrderItem[],
+            isSynced: true,
+            status: order.status, // Sekarang legal karena ada di interface
+          }),
+        );
+
+        // Kita cast ke LocalOrder[] hanya saat simpan ke DB lokal
+        await upsertOrdersFromCloud(normalizedOrders as LocalOrder[]);
+        setOrders(normalizedOrders);
+      } else {
+        const localData = await getAllOrders();
+        const sorted = [...localData].sort(
+          (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        );
+        setOrders(sorted as OrderWithStatus[]);
       }
-  
-      const localData = await getAllOrders();
-      const sorted = [...localData].sort((a, b) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      );
-      setOrders(sorted);
     } catch (error) {
       console.error("Failed to load orders:", error);
     } finally {
       setLoading(false);
     }
-  }, []); // Pastikan loadOrders ada di dependency array
+  }, []);
 
   useEffect(() => {
     loadOrders();
   }, [loadOrders]);
 
-  // Logika Filter
   const filteredOrders = useMemo(() => {
     return orders.filter((o) => {
+      // ✅ Sekarang o.status sudah dikenali sebagai string | undefined
+      const isCompleted = o.status === "COMPLETED";
+
+      if (!options?.allData && !isCompleted) return false;
+
       const matchesSearch =
         !search ||
         o.customerName?.toLowerCase().includes(search.toLowerCase()) ||
         o.id.toLowerCase().includes(search.toLowerCase());
 
-      // FIX: Cek kondisi "all" (huruf kecil)
       const matchesMethod = method === "all" || o.paymentMethod === method;
-
-      // FIX: Bandingkan langsung tanpa toUpperCase agar "Dine In" (dengan spasi) bisa terbaca benar
       const matchesType = type === "all" || o.orderType === type;
 
-      // Filter berdasarkan rentang tanggal
       let matchesDate = true;
       if (!options?.allData) {
         if (dateRange?.from && dateRange?.to) {
@@ -88,10 +97,6 @@ export function useOrderHistory(options?: { allData?: boolean }) {
             start: startOfDay(dateRange.from),
             end: endOfDay(dateRange.to),
           });
-        } else if (dateRange?.from) {
-          const orderDate = new Date(o.createdAt);
-          matchesDate =
-            orderDate.toDateString() === dateRange.from.toDateString();
         }
       }
 
@@ -99,7 +104,6 @@ export function useOrderHistory(options?: { allData?: boolean }) {
     });
   }, [orders, search, method, type, dateRange, options?.allData]);
 
-  // Fungsi Export tetap sama...
   const onExport = useCallback(() => {
     if (filteredOrders.length === 0) {
       alert("Tidak ada data untuk di-export pada rentang tanggal ini.");

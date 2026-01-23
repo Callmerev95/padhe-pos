@@ -7,6 +7,7 @@ type CartActions = {
   increaseQty: (productId: string) => void;
   decreaseQty: (productId: string) => void;
   removeItem: (productId: string) => void;
+  updateNotes: (productId: string, notes: string) => void;
   clearCart: () => void;
   resetOrder: () => void;
   setCustomerName: (name: string) => void;
@@ -15,35 +16,37 @@ type CartActions = {
   loadHoldToCart: (hold: HoldOrder) => void;
 };
 
-type CartStore = CartState & CartActions & {
-  lastAddedProductId: string | null;
-};
-
+// Pastikan CartState di cart.types sudah punya activeOrderId,
+// Jika belum, kita tambahkan secara lokal di sini untuk CartStore
+type CartStore = CartState &
+  CartActions & {
+    activeOrderId: string | null; // ✅ Tambahkan status ID aktif
+    lastAddedProductId: string | null;
+  };
 
 export const useCartStore = create<CartStore>()((set, get) => ({
-
-  
   /* =====================
    * STATE
    ===================== */
   items: [],
   customerName: "",
   orderType: "Dine In",
+  activeOrderId: "", // ✅ Inisialisasi null
   lastAddedProductId: null,
-
-  
 
   /* =====================
    * ACTIONS
    ===================== */
   loadHoldToCart: (hold) => {
     set({
+      activeOrderId: hold.id, // ✅ KUNCI: Simpan ID order dari HOLD agar tidak duplikat saat di-sync ulang
       items: hold.items.map((item) => ({
-        productId: item.productId, // Mapping id dari Hold ke productId Cart
+        productId: item.productId,
         name: item.name,
         price: item.price,
         qty: item.qty,
         categoryType: item.categoryType as "FOOD" | "DRINK",
+        notes: (item as { notes?: string }).notes || "",
       })),
       customerName: hold.customerName,
       orderType: hold.orderType as OrderType,
@@ -54,16 +57,14 @@ export const useCartStore = create<CartStore>()((set, get) => ({
   addItem: (item) =>
     set((state) => {
       const existing = state.items.find(
-        (i: CartItem) => i.productId === item.productId
+        (i: CartItem) => i.productId === item.productId,
       );
 
       const items = existing
         ? state.items.map((i: CartItem) =>
-            i.productId === item.productId
-              ? { ...i, qty: i.qty + 1 }
-              : i
+            i.productId === item.productId ? { ...i, qty: i.qty + 1 } : i,
           )
-        : [...state.items, { ...item, qty: 1 }];
+        : [...state.items, { ...item, qty: 1, notes: "" }];
 
       return {
         items,
@@ -74,9 +75,7 @@ export const useCartStore = create<CartStore>()((set, get) => ({
   increaseQty: (productId: string) =>
     set({
       items: get().items.map((i: CartItem) =>
-        i.productId === productId
-          ? { ...i, qty: i.qty + 1 }
-          : i
+        i.productId === productId ? { ...i, qty: i.qty + 1 } : i,
       ),
     }),
 
@@ -84,17 +83,20 @@ export const useCartStore = create<CartStore>()((set, get) => ({
     set({
       items: get()
         .items.map((i: CartItem) =>
-          i.productId === productId
-            ? { ...i, qty: i.qty - 1 }
-            : i
+          i.productId === productId ? { ...i, qty: i.qty - 1 } : i,
         )
         .filter((i: CartItem) => i.qty > 0),
     }),
 
   removeItem: (productId: string) =>
     set({
-      items: get().items.filter(
-        (i: CartItem) => i.productId !== productId
+      items: get().items.filter((i: CartItem) => i.productId !== productId),
+    }),
+
+  updateNotes: (productId: string, notes: string) =>
+    set({
+      items: get().items.map((i: CartItem) =>
+        i.productId === productId ? { ...i, notes } : i,
       ),
     }),
 
@@ -102,6 +104,7 @@ export const useCartStore = create<CartStore>()((set, get) => ({
     set({
       items: [],
       lastAddedProductId: null,
+      // Note: clearCart biasanya tidak reset customerName/activeOrderId jika hanya ingin hapus item
     }),
 
   resetOrder: () =>
@@ -109,19 +112,17 @@ export const useCartStore = create<CartStore>()((set, get) => ({
       items: [],
       customerName: "",
       orderType: "Dine In",
+      activeOrderId: "", // ✅ Reset ID saat pesanan benar-benar selesai/dibersihkan
       lastAddedProductId: null,
     }),
 
-  setCustomerName: (name: string) =>
-    set({ customerName: name }),
+  setCustomerName: (name: string) => set({ customerName: name }),
 
-  setOrderType: (type: OrderType) =>
-    set({ orderType: type }),
+  setOrderType: (type: OrderType) => set({ orderType: type }),
 
   getSubtotal: () =>
     get().items.reduce(
-      (total: number, item: CartItem) =>
-        total + item.price * item.qty,
-      0
+      (total: number, item: CartItem) => total + item.price * item.qty,
+      0,
     ),
 }));

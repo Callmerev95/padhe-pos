@@ -14,7 +14,10 @@ import { useCartStore } from "@/store/useCartStore";
 import { format } from "date-fns";
 import { id } from "date-fns/locale";
 import { ReceiptView } from "@/components/shared/pos/receipt/ReceiptView";
-
+import { useState } from "react";
+import { toast } from "sonner";
+import { printReceiptBluetooth } from "@/lib/printer-utils";
+import { getPrinterSettings } from "@/app/(dashboard)/user/printerActions";
 
 type Props = {
   open: boolean;
@@ -22,9 +25,12 @@ type Props = {
 };
 
 export function PaymentSuccessModal({ open, onClose }: Props) {
+  // ✅ Cara aman ambil state tanpa harus export interface manual dari store
   const receipt = useReceiptStore((s) => s.receipt);
   const clearReceipt = useReceiptStore((s) => s.clearReceipt);
   const resetOrder = useCartStore((s) => s.resetOrder);
+
+  const [isPrinting, setIsPrinting] = useState(false);
 
   if (!receipt) return null;
 
@@ -34,10 +40,56 @@ export function PaymentSuccessModal({ open, onClose }: Props) {
     onClose();
   }
 
-  function onPrint() {
-    window.print();
+  // ... (bagian import tetap sama)
+
+  async function onPrint() {
+    if (!receipt) {
+      toast.error("Data transaksi tidak ditemukan");
+      return;
+    }
+
+    setIsPrinting(true);
+    try {
+      const res = await getPrinterSettings();
+
+      if (res.success && res.data) {
+        const s = res.data;
+        const currentReceipt = receipt;
+
+        await printReceiptBluetooth({
+          header: s.header || "PADHE COFFEE",
+          address: s.address || "",
+          items: currentReceipt.items.map((i: { name: string; qty: number; price: number }) => ({
+            name: i.name,
+            qty: i.qty,
+            price: i.price,
+          })),
+          total: currentReceipt.total,
+          footer: s.footer || "Terima Kasih!",
+          kasir: currentReceipt.cashierName || "Revangga",
+          // ✅ Tambahan field baru sesuai request
+          customerName: currentReceipt.customerName,
+          orderType: currentReceipt.orderType,
+          subtotal: currentReceipt.subtotal,
+          tax: currentReceipt.tax,
+          charge: currentReceipt.charge,
+          paid: currentReceipt.paid,
+          change: currentReceipt.change,
+        });
+
+        toast.success("Struk sedang dicetak...");
+      } else {
+        toast.error("Atur printer di menu Settings terlebih dahulu");
+      }
+    } catch (err) {
+      const error = err as Error;
+      toast.error(`Gagal Cetak: ${error.message || "Masalah koneksi"}`);
+    } finally {
+      setIsPrinting(false);
+    }
   }
 
+  // ... (sisanya tetap sama)
 
   function onDownloadPdf() {
     alert("Download PDF (coming soon)");
@@ -45,86 +97,82 @@ export function PaymentSuccessModal({ open, onClose }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-sm text-center space-y-6">
-        {/* ================= HEADER (ACCESSIBILITY) ================= */}
+      <DialogContent className="max-w-sm text-center p-6 space-y-4 overflow-hidden">
         <DialogHeader>
           <VisuallyHidden>
             <DialogTitle>Pembayaran Berhasil</DialogTitle>
           </VisuallyHidden>
         </DialogHeader>
 
-        {/* ================= ICON ================= */}
-        <div className="flex justify-center">
-          <CheckCircle2 className="h-16 w-16 text-green-600" />
+        <div className="flex flex-col items-center justify-center space-y-2">
+          <CheckCircle2 className="h-14 w-14 text-green-600" />
+          <div className="space-y-1">
+            <h2 className="text-xl font-bold">Pembayaran Berhasil!</h2>
+            <p className="text-xs text-muted-foreground">
+              Transaksi telah berhasil diproses
+            </p>
+          </div>
         </div>
 
-        {/* ================= TITLE ================= */}
-        <div className="space-y-1">
-          <h2 className="text-2xl font-semibold">
-            Pembayaran Berhasil!
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Transaksi telah berhasil di proses
+        <div className="py-2">
+          <Button
+            onClick={onPrint}
+            disabled={isPrinting}
+            className="w-full h-14 text-lg font-bold bg-[#1a1f2c] hover:bg-[#2d3446] text-white shadow-lg transition-transform active:scale-95"
+          >
+            <Printer className="mr-2 h-6 w-6" />
+            {isPrinting ? "Mencetak..." : "PRINT STRUK"}
+          </Button>
+          <p className="text-[10px] text-muted-foreground mt-2">
+            Klik tombol biru di atas untuk mencetak struk thermal
           </p>
         </div>
 
-        {/* ================= TOTAL ================= */}
-        <div>
-          <p className="text-sm text-muted-foreground">
+        <div className="p-3 border rounded-xl bg-slate-50/50">
+          <p className="text-xs text-muted-foreground uppercase tracking-wider">
             Total Pembayaran
           </p>
-          <p className="text-3xl font-bold">
+          <p className="text-2xl font-black text-slate-900">
             Rp {receipt.total.toLocaleString("id-ID")}
           </p>
         </div>
 
-        {/* ================= SUMMARY ================= */}
-        <div className="rounded-lg border bg-muted/40 p-3 text-sm space-y-2">
+        <div className="rounded-lg border border-dashed bg-muted/30 p-3 text-[11px] space-y-1.5 text-left">
           <div className="flex justify-between">
-            <span>ID Transaksi</span>
-            <span>#{receipt.orderId}</span>
+            <span className="text-muted-foreground">ID Transaksi</span>
+            <span className="font-mono font-medium">#{receipt.orderId}</span>
           </div>
 
           <div className="flex justify-between">
-            <span>Waktu Transaksi</span>
+            <span className="text-muted-foreground">Waktu</span>
             <span>
-              {format(new Date(receipt.createdAt), "dd MMM yyyy, HH:mm", {
+              {format(new Date(receipt.createdAt), "HH:mm, dd MMM yyyy", {
                 locale: id,
               })}
             </span>
           </div>
 
-          {receipt.customerName && (
-            <div className="flex justify-between">
-              <span>Nama Pelanggan</span>
-              <span>{receipt.customerName}</span>
-            </div>
-          )}
-
-          <div className="flex justify-between">
-            <span>Metode Pembayaran</span>
+          <div className="flex justify-between border-t pt-1.5 mt-1.5 font-bold">
+            <span>Metode</span>
             <span>{receipt.paymentMethod}</span>
-          </div>
-
-          <div className="flex justify-between font-semibold pt-1">
-            <span>Total</span>
-            <span>Rp {receipt.total.toLocaleString("id-ID")}</span>
           </div>
         </div>
 
-        {/* ================= ACTIONS ================= */}
-        <div className="grid gap-2 pt-2">
-          <Button onClick={onPrint}>
-            <Printer className="mr-2 h-4 w-4" />
-            Print Receipt
-          </Button>
-
-          <Button variant="outline" onClick={onDownloadPdf}>
+        <div className="grid grid-cols-2 gap-2 pt-2">
+          <Button
+            variant="outline"
+            onClick={onDownloadPdf}
+            className="h-10 text-xs border-slate-300"
+          >
             <FileText className="mr-2 h-4 w-4" />
-            Download PDF
+            PDF
           </Button>
 
-          <Button variant="ghost" onClick={onFinish}>
+          <Button
+            variant="secondary"
+            onClick={onFinish}
+            className="h-10 text-xs bg-slate-100 hover:bg-slate-200"
+          >
             Selesai
           </Button>
         </div>

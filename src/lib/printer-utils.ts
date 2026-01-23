@@ -1,0 +1,142 @@
+// src/lib/printer-utils.ts
+
+export interface PrintItem {
+  name: string;
+  qty: number;
+  price: number;
+}
+
+export interface ReceiptData {
+  header: string;
+  address: string;
+  items: PrintItem[];
+  total: number;
+  footer: string;
+  kasir: string;
+  customerName?: string;
+  orderType?: string;
+  subtotal: number;
+  tax?: number;
+  charge?: number;
+  paid?: number;
+  change?: number;
+}
+
+interface BluetoothNavigator extends Navigator {
+  bluetooth: {
+    requestDevice: (options: {
+      acceptAllDevices?: boolean;
+      optionalServices?: string[];
+      filters?: Array<{ services: string[] }>;
+    }) => Promise<{
+      gatt?: {
+        connect: () => Promise<{
+          getPrimaryService: (service: string) => Promise<{
+            getCharacteristic: (characteristic: string) => Promise<{
+              writeValue: (value: BufferSource) => Promise<void>;
+            }>;
+          }>;
+        }>;
+      };
+    }>;
+  };
+}
+
+export async function printReceiptBluetooth(data: ReceiptData) {
+  try {
+    const nav = navigator as unknown as BluetoothNavigator;
+    if (!nav.bluetooth) throw new Error("Browser tidak mendukung Bluetooth");
+
+    const device = await nav.bluetooth.requestDevice({
+      acceptAllDevices: true,
+      optionalServices: ["000018f0-0000-1000-8000-00805f9b34fb"],
+    });
+
+    if (!device.gatt) throw new Error("GATT tidak tersedia");
+    const server = await device.gatt.connect();
+    const service = await server.getPrimaryService(
+      "000018f0-0000-1000-8000-00805f9b34fb",
+    );
+    const characteristic = await service.getCharacteristic(
+      "00002af1-0000-1000-8000-00805f9b34fb",
+    );
+
+    // src/lib/printer-utils.ts (Hanya bagian pembentukan 'content')
+
+    const encoder = new TextEncoder();
+    const formatRow = (
+      label: string,
+      value: string | number,
+      isBold: boolean = false,
+    ) => {
+      const valStr =
+        typeof value === "number" ? value.toLocaleString("id-ID") : value;
+      const spaces = 32 - label.length - valStr.length;
+      const row = `${label}${" ".repeat(spaces > 0 ? spaces : 1)}${valStr}\n`;
+      return isBold ? `\x1b\x45\x01${row}\x1b\x45\x00` : row;
+    };
+
+    // --- 1. HEADER (Bold & Besar) ---
+    let content = `\x1b\x61\x01`; // Center align
+    content += `\x1b\x45\x01\x1b\x21\x10${data.header.toUpperCase()}\x1b\x21\x00\x1b\x45\x00\n`; // Bold + Double Height
+    content += `\x1b\x21\x01${data.address}\x1b\x21\x00\n`; // Font kecil untuk alamat
+    content += `--------------------------------\n\x1b\x61\x00`; // Back to Left
+
+    // --- 2. INFO TRANSAKSI (Normal) ---
+    content += formatRow("Tgl", new Date().toLocaleDateString("id-ID"));
+    content += formatRow("Kasir", data.kasir);
+    if (data.customerName)
+      content += formatRow("Cust", data.customerName, true); // Nama customer kita Bold
+    content += formatRow("Tipe", data.orderType || "Dine In");
+    content += `--------------------------------\n`;
+
+    // --- 3. ITEMS (Nama Item Bold) ---
+    data.items.forEach((item: PrintItem) => {
+      content += `\x1b\x45\x01${item.name.toUpperCase()}\x1b\x45\x00\n`; // Nama item Bold
+      const itemRow = `${item.qty} x ${item.price.toLocaleString("id-ID")}`;
+      const lineTotal = (item.qty * item.price).toLocaleString("id-ID");
+      const spaces = 32 - itemRow.length - lineTotal.length;
+      content += `${itemRow}${" ".repeat(spaces > 0 ? spaces : 1)}${lineTotal}\n`;
+    });
+
+    content += `--------------------------------\n`;
+
+    // --- 4. RINCIAN BIAYA (Normal) ---
+    content += formatRow("Subtotal", data.subtotal);
+    if (data.tax) content += formatRow("Tax", data.tax);
+    if (data.charge) content += formatRow("Service", data.charge);
+    content += `--------------------------------\n`;
+
+    // --- 5. GRAND TOTAL (Bold & Lebih Besar) ---
+    const totalVal = `Rp ${data.total.toLocaleString("id-ID")}`;
+    const totalSpaces = 32 - 6 - totalVal.length;
+    // Pakai Double Width + Bold untuk Total
+    content += `\x1b\x45\x01\x1b\x21\x20TOTAL ${" ".repeat(totalSpaces > 0 ? totalSpaces : 1)}${totalVal}\x1b\x21\x00\x1b\x45\x00\n`;
+
+    // --- 6. PEMBAYARAN (Kembali Bold) ---
+    if (data.paid) {
+      content += formatRow("Tunai", data.paid);
+      content += formatRow("Kembali", data.change || 0, true); // Kembali kita Bold
+    }
+
+    content += `--------------------------------\n`;
+    content += `\x1b\x61\x01\n\x1b\x45\x01${data.footer}\x1b\x45\x00\n\n\n\n\n\x1b\x61\x00`;
+
+    // ... sisa kode pengiriman chunking tetap sama
+
+    const fullBuffer = encoder.encode(content);
+    const CHUNK_SIZE = 512;
+
+    for (let i = 0; i < fullBuffer.length; i += CHUNK_SIZE) {
+      const chunk = fullBuffer.slice(i, i + CHUNK_SIZE);
+      await characteristic.writeValue(chunk);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+
+    return { success: true };
+  } catch (err) {
+    const error = err as Error;
+    console.error("PRINT_ERROR:", error.message);
+    return { success: false, error: error.message };
+  }
+}

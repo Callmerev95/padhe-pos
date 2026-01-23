@@ -2,28 +2,12 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { Prisma } from "@prisma/client";
+import { Prisma, OrderStatus } from "@prisma/client";
+import { type OrderItem, LocalOrderSchema } from "@/lib/db";
+import { z } from "zod";
 
-interface OrderItem {
-  id: string;
-  name: string;
-  qty: number;
-  price: number;
-  categoryType: string;
-}
+type CreateOrderParams = z.infer<typeof LocalOrderSchema>;
 
-interface CreateOrderParams {
-  id: string;
-  createdAt: string;
-  total: number;
-  paid: number;
-  paymentMethod: string;
-  customerName: string;
-  orderType: string;
-  items: OrderItem[];
-}
-
-// 1. Fungsi internal untuk memotong stok (Safe & Robust)
 async function processStockDeduction(
   tx: Prisma.TransactionClient,
   items: OrderItem[],
@@ -31,18 +15,15 @@ async function processStockDeduction(
 ) {
   for (const item of items) {
     try {
-      // Cari resep berdasarkan productId (item.id)
       const recipes = await tx.recipe.findMany({
         where: { productId: item.id },
       });
 
-      // Jika tidak ada resep, lewati ke item berikutnya
       if (!recipes || recipes.length === 0) continue;
 
       for (const recipe of recipes) {
         const deductQty = recipe.quantity * item.qty;
 
-        // Update stok bahan baku
         const updatedIngredient = await tx.ingredient.update({
           where: { id: recipe.ingredientId },
           data: {
@@ -50,7 +31,6 @@ async function processStockDeduction(
           },
         });
 
-        // Catat Log Stok
         await tx.stockLog.create({
           data: {
             ingredientId: recipe.ingredientId,
@@ -68,104 +48,218 @@ async function processStockDeduction(
   }
 }
 
-// 2. Fungsi Utama Sync
-export async function syncOrderToCloud(data: CreateOrderParams) {
+export async function syncOrderToCloud(
+  data: CreateOrderParams,
+  forceStatus?: OrderStatus,
+) {
   try {
     const result = await prisma.$transaction(
       async (tx) => {
-        // Simpan Order
+        const existingOrder = await tx.order.findUnique({
+          where: { id: data.id },
+        });
+
+        if (existingOrder) {
+          const oldItems =
+            (existingOrder.items as unknown as OrderItem[]) || [];
+          const newItems = data.items;
+          let isNewItemAdded = false;
+
+          const mergedItems = newItems.map((newItem) => {
+            const oldItem = oldItems.find((i) => i.id === newItem.id);
+            if (!oldItem || newItem.qty > oldItem.qty) {
+              isNewItemAdded = true;
+            }
+
+            return {
+              ...newItem,
+              isDone: oldItem ? oldItem.isDone : false,
+            };
+          });
+
+          for (const newItem of newItems) {
+            const oldItem = oldItems.find((i) => i.id === newItem.id);
+            const oldQty = oldItem ? oldItem.qty : 0;
+            const diffQty = newItem.qty - oldQty;
+
+            if (diffQty > 0) {
+              await processStockDeduction(
+                tx,
+                [{ ...newItem, qty: diffQty }],
+                data.id,
+              );
+            }
+          }
+
+          let nextStatus = existingOrder.status;
+          if (forceStatus === "COMPLETED") {
+            nextStatus = "COMPLETED";
+          } else if (isNewItemAdded) {
+            nextStatus = "PENDING";
+          }
+
+          return await tx.order.update({
+            where: { id: data.id },
+            data: {
+              total: data.total,
+              paid: data.paid,
+              paymentMethod: data.paymentMethod,
+              items: mergedItems as unknown as Prisma.InputJsonValue,
+              customerName: data.customerName ?? "Guest",
+              orderType: data.orderType,
+              status: nextStatus,
+            },
+          });
+        }
+
         const order = await tx.order.create({
           data: {
             id: data.id,
             createdAt: new Date(data.createdAt),
             total: data.total,
             paid: data.paid,
-            paymentMethod: data.paymentMethod,
-            customerName: data.customerName,
+            paymentMethod: String(data.paymentMethod), // Pastikan String sesuai Schema
+            customerName: data.customerName ?? "Guest",
             orderType: data.orderType,
             items: data.items as unknown as Prisma.InputJsonValue,
+            status: forceStatus || "PENDING",
           },
         });
 
-        // Jalankan Potong Stok
         await processStockDeduction(tx, data.items, data.id);
-
         return order;
       },
-      {
-        maxWait: 5000,
-        timeout: 20000, // Memberikan napas 20 detik agar tidak timeout lagi
-      },
+      { maxWait: 5000, timeout: 20000 },
     );
 
     revalidatePath("/");
     revalidatePath("/order");
+    revalidatePath("/kitchen");
     revalidatePath("/inventory/ingredients");
 
     return { success: true, data: result };
   } catch (error) {
-    // Hapus ': any' di sini
-    const errorMessage =
-      error instanceof Error ? error.message : "An unknown error occurred";
-    console.error("CRITICAL_SYNC_ERROR:", error);
-    return { success: false, error: errorMessage };
-  }
-}
-
-// 3. Fungsi Bulk Sync (Jika dibutuhkan)
-export async function syncBulkOrders(orders: CreateOrderParams[]) {
-  try {
-    const results = await prisma.$transaction(
-      async (tx) => {
-        const processedOrders = [];
-
-        for (const order of orders) {
-          const existingOrder = await tx.order.findUnique({
-            where: { id: order.id },
-          });
-
-          if (!existingOrder) {
-            const created = await tx.order.create({
-              data: {
-                id: order.id,
-                customerName: order.customerName,
-                total: order.total,
-                paid: order.paid,
-                paymentMethod: order.paymentMethod,
-                orderType: order.orderType,
-                items: order.items as unknown as Prisma.InputJsonValue,
-                createdAt: new Date(order.createdAt),
-              },
-            });
-
-            await processStockDeduction(tx, order.items, order.id);
-            processedOrders.push(created);
-          }
-        }
-        return processedOrders;
-      },
-      {
-        timeout: 30000, // Bulk biasanya lebih lama, kasih 30 detik
-      },
-    );
-
-    revalidatePath("/");
-    revalidatePath("/inventory/ingredients");
-    return { success: true, count: results.length };
-  } catch (error) {
-    console.error("Bulk Sync Error:", error);
-    return { success: false };
+    console.error("SYNC_ERROR_DETAIL:", error); // Lebih detail untuk debug di terminal
+    return { success: false, error: "Gagal Sinkronisasi Cloud" };
   }
 }
 
 export async function getOrdersFromCloud() {
   try {
     const orders = await prisma.order.findMany({
+      where: { status: "COMPLETED" },
       orderBy: { createdAt: "desc" },
     });
-    return { success: true, data: orders };
+
+    return {
+      success: true,
+      data: orders.map((o) => ({ ...o, isSynced: true })),
+    };
   } catch (error) {
     console.error("Fetch Orders Error:", error);
     return { success: false, error: "Gagal Mengambil data Cloud" };
+  }
+}
+
+export async function updateOrderStatus(
+  orderId: string,
+  newStatus: OrderStatus,
+) {
+  try {
+    const order = await prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) return { success: false, error: "Order tidak ditemukan" };
+
+    if (newStatus === "READY") {
+      const items = (order.items as unknown as OrderItem[]) || [];
+      if (!items.every((item) => item.isDone)) {
+        return { success: false, error: "Masih ada item belum kelar!" };
+      }
+    }
+
+    const updatedOrder = await prisma.order.update({
+      where: { id: orderId },
+      data: { status: newStatus },
+    });
+
+    revalidatePath("/order");
+    revalidatePath("/kitchen");
+    return { success: true, data: updatedOrder };
+  } catch (error) {
+    console.error("Update Status Error:", error);
+    return { success: false, error: "Gagal update status" };
+  }
+}
+
+export async function getKitchenOrders() {
+  try {
+    const orders = await prisma.order.findMany({
+      where: {
+        status: { in: ["PENDING", "PREPARING"] },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+    return { success: true, data: orders };
+  } catch {
+    return { success: false, error: "Gagal ambil antrian dapur" };
+  }
+}
+
+export async function updateItemStatus(
+  orderId: string,
+  itemIdx: number,
+  isDone: boolean,
+) {
+  try {
+    const order = await prisma.order.findUnique({ where: { id: orderId } });
+    if (!order || !order.items)
+      return { success: false, error: "Order tidak ditemukan" };
+
+    const items = [...(order.items as unknown as OrderItem[])];
+    if (items[itemIdx]) items[itemIdx].isDone = isDone;
+
+    const updated = await prisma.order.update({
+      where: { id: orderId },
+      data: { items: items as unknown as Prisma.InputJsonValue },
+    });
+
+    revalidatePath("/kitchen");
+    return { success: true, data: updated };
+  } catch (error) {
+    console.error("Update Item Error:", error);
+    return { success: false, error: "Gagal update item" };
+  }
+}
+
+export async function syncBulkOrders(orders: CreateOrderParams[]) {
+  try {
+    const results = await prisma.$transaction(async (tx) => {
+      const processed = [];
+      for (const order of orders) {
+        const exist = await tx.order.findUnique({ where: { id: order.id } });
+        if (!exist) {
+          const created = await tx.order.create({
+            data: {
+              id: order.id,
+              customerName: order.customerName ?? "Guest",
+              total: order.total,
+              paid: order.paid,
+              paymentMethod: String(order.paymentMethod),
+              orderType: order.orderType,
+              items: order.items as unknown as Prisma.InputJsonValue,
+              status: "COMPLETED",
+              createdAt: new Date(order.createdAt),
+            },
+          });
+          await processStockDeduction(tx, order.items, order.id);
+          processed.push(created);
+        }
+      }
+      return processed;
+    });
+    revalidatePath("/");
+    return { success: true, count: results.length };
+  } catch (error) {
+    console.error("Bulk Sync Error:", error);
+    return { success: false };
   }
 }

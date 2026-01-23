@@ -11,6 +11,7 @@ import {
   Warehouse,
   Boxes,
   Receipt,
+  ChefHat,
 } from "lucide-react";
 import type { Role } from "@prisma/client";
 
@@ -103,6 +104,12 @@ export const SIDEBAR_CONFIG: SidebarSectionType[] = [
         label: "POS",
         href: "/pos",
         icon: ShoppingCart,
+        roles: ["ADMIN", "CASHIER"],
+      },
+      {
+        label: "Dapur (KDS)", // ✅ Menu Baru
+        href: "/kitchen",    // ✅ Sesuaikan dengan folder src/app/(dashboard)/kitchen
+        icon: ChefHat,
         roles: ["ADMIN", "CASHIER"],
       },
       {

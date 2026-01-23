@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react"; 
+import { useState } from "react";
 import {
   Drawer,
   DrawerContent,
@@ -23,6 +23,9 @@ import { Printer, Trash2 } from "lucide-react";
 import { useOrderDetail } from "@/features/order-history/useOrderDetail";
 import { useReceiptStore } from "@/store/useReceiptStore";
 import { deleteOrder } from "@/lib/db";
+import { toast } from "sonner"; // ✅ Tambahk
+import { printReceiptBluetooth } from "@/lib/printer-utils"; // ✅ Import printer utilsan toast untuk feedback
+import { getPrinterSettings } from "@/app/(dashboard)/user/printerActions"; // ✅ Import settings
 
 // Definisi tipe data untuk item dalam order
 type OrderItem = {
@@ -54,9 +57,12 @@ type Props = {
 export function OrderDrawer({ open, onClose, orderId }: Props) {
   const { order, loading } = useOrderDetail(orderId);
   const setReceipt = useReceiptStore((s) => s.setReceipt);
-  
+
   // State untuk mengontrol Alert Dialog
   const [showVoidAlert, setShowVoidAlert] = useState(false);
+
+  // State untuk mengontrol proses pencetakan
+  const [isPrinting, setIsPrinting] = useState(false);
 
   //if (!open) return null;
 
@@ -75,36 +81,46 @@ export function OrderDrawer({ open, onClose, orderId }: Props) {
     }
   }
 
-  // Fungsi untuk mencetak struk
-  function onPrint() {
+  async function onPrint() {
     if (!safeOrder) return;
 
-    const paidAmount = safeOrder.paid ?? safeOrder.total;
-    const calculateChange = paidAmount - safeOrder.total;
+    setIsPrinting(true);
+    try {
+      const res = await getPrinterSettings();
 
-    setReceipt({
-      orderId: safeOrder.id,
-      createdAt: safeOrder.createdAt,
-      items: safeOrder.items.map((i: OrderItem) => ({
-        name: i.name,
-        qty: i.qty,
-        price: i.price,
-      })),
-      subtotal: safeOrder.total,
-      tax: 0,
-      charge: 0,
-      total: safeOrder.total,
-      paid: paidAmount,
-      change: calculateChange > 0 ? calculateChange : 0,
-      customerName: safeOrder.customerName || "Guest",
-      cashierName: "Rev",
-      orderType: safeOrder.orderType as "Dine In" | "Take Away",
-      paymentMethod: safeOrder.paymentMethod as "CASH" | "DANA" | "BCA" | "QRIS",
-    });
+      if (res.success && res.data) {
+        const s = res.data;
+        const paidAmount = safeOrder.paid ?? safeOrder.total;
+        const calculateChange = paidAmount - safeOrder.total;
 
-    setTimeout(() => {
-      window.print();
-    }, 300);
+        await printReceiptBluetooth({
+          header: s.header || "PADHE COFFEE",
+          address: s.address || "",
+          items: safeOrder.items.map((i: OrderItem) => ({
+            name: i.name,
+            qty: i.qty,
+            price: i.price,
+          })),
+          total: safeOrder.total,
+          footer: s.footer || "Terima Kasih!",
+          kasir: "Rev", // Atau ambil dari state kasir jika ada
+          customerName: safeOrder.customerName || "Guest",
+          orderType: safeOrder.orderType,
+          subtotal: safeOrder.total, // Jika di DB tidak ada subtotal, pakai total
+          paid: paidAmount,
+          change: calculateChange > 0 ? calculateChange : 0,
+        });
+
+        toast.success("Mencetak struk...");
+      } else {
+        toast.error("Atur printer di menu Settings terlebih dahulu");
+      }
+    } catch (err) {
+      const error = err as Error;
+      toast.error(`Gagal Cetak: ${error.message}`);
+    } finally {
+      setIsPrinting(false);
+    }
   }
 
   return (
@@ -176,13 +192,17 @@ export function OrderDrawer({ open, onClose, orderId }: Props) {
               </div>
 
               <div className="grid grid-cols-1 gap-3">
-                <Button className="w-full bg-slate-900 hover:bg-black py-7 text-base shadow-lg" onClick={onPrint}>
+                <Button
+                  className="w-full bg-[#1a1f2c] hover:bg-[#2d3446] py-7 text-base shadow-lg"
+                  onClick={onPrint}
+                  disabled={isPrinting} // ✅ Gunakan loading state
+                >
                   <Printer className="mr-3 h-5 w-5" />
-                  Print Receipt
+                  {isPrinting ? "Mencetak..." : "Print Receipt"}
                 </Button>
 
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="w-full text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 py-6"
                   onClick={() => setShowVoidAlert(true)} // Munculkan Alert Dialog
                 >
@@ -201,13 +221,13 @@ export function OrderDrawer({ open, onClose, orderId }: Props) {
           <AlertDialogHeader>
             <AlertDialogTitle>Konfirmasi Pembatalan</AlertDialogTitle>
             <AlertDialogDescription>
-              Apakah Anda yakin ingin membatalkan pesanan <strong>#{safeOrder?.id}</strong>? 
+              Apakah Anda yakin ingin membatalkan pesanan <strong>#{safeOrder?.id}</strong>?
               Tindakan ini tidak dapat dibatalkan dan data akan dihapus permanen dari riwayat transaksi.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Kembali</AlertDialogCancel>
-            <AlertDialogAction 
+            <AlertDialogAction
               onClick={handleConfirmVoid}
               className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
             >

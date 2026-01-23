@@ -1,6 +1,11 @@
 import { create } from "zustand";
 import type { HoldOrder } from "./holdOrder.types";
-import { saveHoldOrderLocal, deleteHoldOrderLocal, getAllHoldOrdersLocal } from "@/lib/db";
+import {
+  saveHoldOrderLocal,
+  deleteHoldOrderLocal,
+  getAllHoldOrdersLocal,
+} from "@/lib/db";
+import { generateOrderId } from "@/lib/generateOrderId";
 
 type HoldOrderStore = {
   holds: HoldOrder[];
@@ -57,7 +62,7 @@ export const useHoldOrderStore = create<HoldOrderStore>((set, get) => ({
     const holdsToMerge = get().holds.filter((h) => ids.includes(h.id));
 
     const merged: HoldOrder = {
-      id: crypto.randomUUID(),
+      id: generateOrderId("POS-"),
       items: holdsToMerge.flatMap((h) => h.items),
       customerName: holdsToMerge.map((h) => h.customerName).join(" + "),
       orderType: holdsToMerge[0].orderType,
@@ -81,7 +86,7 @@ export const useHoldOrderStore = create<HoldOrderStore>((set, get) => ({
     if (!original) return [];
 
     const splits = itemsGroups.map((items) => ({
-      id: crypto.randomUUID(),
+      id: generateOrderId("POS-"),
       items,
       customerName: original.customerName,
       orderType: original.orderType,
@@ -94,10 +99,7 @@ export const useHoldOrderStore = create<HoldOrderStore>((set, get) => ({
     splits.forEach((newHold) => saveHoldOrderLocal(newHold));
 
     set((state) => ({
-      holds: [
-        ...state.holds.filter((h) => h.id !== id),
-        ...splits,
-      ],
+      holds: [...state.holds.filter((h) => h.id !== id), ...splits],
     }));
 
     return splits;
