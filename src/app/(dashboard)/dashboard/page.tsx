@@ -28,8 +28,6 @@ export default async function DashboardPage() {
     getLowStockSummary()
   ]);
 
-  // Sesuai action getLowStockSummary kamu: return { success, items, count }
-  // Kita ambil items-nya, jika gagal kasih array kosong
   const criticalItems = lowStockRes.items || [];
   const profitAnalysis = await getDashboardProfitData();
 

@@ -36,30 +36,30 @@ export function SidebarExpandable({ item, collapsed, pathname }: Props) {
     <button
       onClick={() => setManualExpanded((p) => !p)}
       className={cn(
-        "flex items-center rounded-xl w-full transition-all group",
+        "flex items-center rounded-2xl w-full transition-all duration-300 group", // Ganti ke rounded-2xl
         collapsed
           ? "justify-center h-11 w-11 mx-auto"
-          : "px-4 py-3 gap-3",
-        /* WARNA: Mengikuti tema Figma (Hitam/Abu-abu) */
+          : "px-4 py-3 gap-3 mx-2 w-[calc(100%-16px)]", // Tambah margin agar sejajar SidebarItem
+        /* WARNA: Menyesuaikan Slate 900 */
         isRouteActive
-          ? "text-primary bg-accent/50 font-bold"
-          : "text-muted-foreground hover:bg-accent hover:text-primary"
+          ? "text-slate-900 bg-slate-50 font-bold"
+          : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
       )}
     >
       <item.icon className={cn(
-        "h-5 w-5 shrink-0 transition-colors",
-        isRouteActive ? "text-primary" : "text-muted-foreground group-hover:text-primary"
+        "h-5 w-5 shrink-0 transition-all duration-300",
+        isRouteActive ? "text-slate-900 scale-110" : "text-slate-400 group-hover:text-slate-900 group-hover:scale-110"
       )} />
 
       {!collapsed && (
         <>
-          <span className="flex-1 text-left text-sm font-bold tracking-tight">
+          <span className="flex-1 text-left text-[13px] font-bold tracking-tight">
             {item.label}
           </span>
           <ChevronRight
             className={cn(
-              "h-4 w-4 transition-transform opacity-50",
-              expanded && "rotate-90 opacity-100"
+              "h-4 w-4 transition-transform duration-300 text-slate-400",
+              expanded && "rotate-90 text-slate-900"
             )}
           />
         </>
@@ -78,7 +78,7 @@ export function SidebarExpandable({ item, collapsed, pathname }: Props) {
                   {Header}
                 </TooltipTrigger>
               </PopoverTrigger>
-              <TooltipContent side="right" className="bg-primary text-white font-bold text-[10px] uppercase">
+              <TooltipContent side="right" sideOffset={15} className="bg-slate-900 text-white font-bold text-[10px] uppercase tracking-widest px-3 py-1.5 rounded-xl border-none shadow-xl">
                 {item.label}
               </TooltipContent>
             </Tooltip>
@@ -86,13 +86,14 @@ export function SidebarExpandable({ item, collapsed, pathname }: Props) {
 
           <PopoverContent
             side="right"
+            sideOffset={20}
             align="start"
-            className="w-56 p-2 bg-white border border-sidebar-border shadow-xl rounded-2xl"
+            className="w-56 p-1.5 bg-white border border-slate-100 shadow-[0_15px_40px_rgba(0,0,0,0.08)] rounded-3xl"
           >
-            <p className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">
+            <p className="px-4 py-3 text-[9px] font-black uppercase tracking-[0.2em] text-slate-300">
               {item.label}
             </p>
-            <div className="space-y-1">
+            <div className="space-y-0.5">
               {item.children?.map((child) => (
                 <SidebarItem
                   key={child.label}
@@ -113,8 +114,10 @@ export function SidebarExpandable({ item, collapsed, pathname }: Props) {
                 initial={{ height: 0, opacity: 0 }}
                 animate={{ height: "auto", opacity: 1 }}
                 exit={{ height: 0, opacity: 0 }}
-                /* PREMIUM UPDATE: Garis indikator yang lebih elegan */
-                className="ml-6.5 mt-1 space-y-1 border-l-2 border-slate-100 pl-2 py-1"            >
+                transition={{ duration: 0.3, ease: "easeInOut" }}
+                /* PREMIUM UPDATE: Indikator garis yang lebih halus sesuai mockup */
+                className="ml-8 mt-1 space-y-0.5 border-l border-slate-100 pl-1 py-1"
+              >
                 {item.children?.map((child) => (
                   <SidebarItem
                     key={child.label}

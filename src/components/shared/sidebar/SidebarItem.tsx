@@ -24,40 +24,40 @@ export function SidebarItem({ item, collapsed, active }: Props) {
     <motion.div
       whileHover={{ x: collapsed ? 0 : 4 }}
       className={cn(
-        "relative flex items-center gap-2 rounded-2xl transition-all duration-200 group",
+        "relative flex items-center gap-2 rounded-2xl transition-all duration-300 group",
         collapsed
           ? "justify-center h-11 w-11 mx-auto"
-          : "px-4 py-3",
-        /* PREMIUM UPDATE: Glassmorphism & Shadow Glow */
+          : "px-4 py-3 mx-2", // Tambah margin dikit biar gak nempel border sidebar
+        
+        /* PREMIUM UPDATE: Menyesuaikan dengan mockup tablet baru */
         active
-          //? "bg-primary text-white shadow-[0_10px_20px_-5px_rgba(3,2,19,0.3)] ring-1 ring-white/10" 
-          //: "text-muted-foreground hover:bg-accent/70 hover:text-primary"
-          ? "bg-slate-900 text-white shadow-xl shadow-black/10" 
-          : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+          ? "bg-slate-900 text-white shadow-lg shadow-slate-200" 
+          : "text-slate-500 hover:bg-slate-100/50 hover:text-slate-900"
         )}
     >
       <Icon className={cn(
-        //"h-5 w-5 shrink-0 transition-all duration-300 group-hover:scale-110",
-        "h-5 w-5 shrink-0 transition-transform duration-200",
-        //active ? "text-white" : "text-muted-foreground group-hover:text-primary"
-        active ? "text-white scale-105" : "text-slate-400 group-hover:text-slate-900"
+        "h-5 w-5 shrink-0 transition-all duration-300",
+        active ? "text-white scale-110" : "text-slate-400 group-hover:text-slate-900 group-hover:scale-110"
       )} />
 
       {!collapsed && (
-        <span className={cn(
-          "font-bold text-sm tracking-tight transition-colors",
-          //active ? "text-white" : "text-muted-foreground group-hover:text-primary"
-          active ? "text-white" : "text-slate-500 group-hover:text-slate-900"
-        )}>
+        <motion.span 
+          initial={{ opacity: 0, x: -10 }}
+          animate={{ opacity: 1, x: 0 }}
+          className={cn(
+            "font-bold text-[13px] tracking-tight transition-colors", // Font size disesuaikan untuk tablet
+            active ? "text-white" : "text-slate-500 group-hover:text-slate-900"
+          )}
+        >
           {item.label}
-        </span>
+        </motion.span>
       )}
 
-      {/* INDIKATOR: Lebih subtle dengan efek glow putih */}
+      {/* INDIKATOR: Dibuat lebih modern sesuai mockup */}
       {active && !collapsed && (
         <motion.div
           layoutId="activeIndicator"
-          className="absolute right-3 w-1.5 h-1.5 bg-white rounded-full"
+          className="absolute right-3 w-1.5 h-1.5 bg-white/40 rounded-full blur-[1px]"
         />
       )}
     </motion.div>
@@ -68,9 +68,13 @@ export function SidebarItem({ item, collapsed, active }: Props) {
       <TooltipProvider delayDuration={0}>
         <Tooltip>
           <TooltipTrigger asChild>
-            <Link href={item.href ?? "#"}>{ItemContent}</Link>
+            <Link href={item.href ?? "#"} className="block py-1">{ItemContent}</Link>
           </TooltipTrigger>
-          <TooltipContent side="right" className="bg-slate-900 border-none text-white font-bold text-[10px] uppercase tracking-widest px-3 py-1.5 shadow-xl">
+          <TooltipContent 
+            side="right" 
+            sideOffset={15}
+            className="bg-slate-900 border-none text-white font-bold text-[10px] uppercase tracking-widest px-3 py-1.5 shadow-xl rounded-xl"
+          >
             {item.label}
           </TooltipContent>
         </Tooltip>
@@ -78,5 +82,5 @@ export function SidebarItem({ item, collapsed, active }: Props) {
     );
   }
 
-  return <Link href={item.href ?? "#"}>{ItemContent}</Link>;
+  return <Link href={item.href ?? "#"} className="block py-0.5">{ItemContent}</Link>;
 }
