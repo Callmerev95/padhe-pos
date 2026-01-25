@@ -17,6 +17,16 @@ export function ProductPanel({ products }: Props) {
   const [query, setQuery] = useState("");
   const [categoryId, setCategoryId] = useState<string | null>(null);
 
+  const uniqueCategories = useMemo(() => {
+    const categoriesMap = new Map();
+    products.forEach((p) => {
+      if (p.category && !categoriesMap.has(p.category.id)) {
+        categoriesMap.set(p.category.id, p.category);
+      }
+    });
+    return Array.from(categoriesMap.values());
+  }, [products]);
+
   const filteredProducts = useMemo(() => {
     const q = query.toLowerCase();
 
@@ -33,28 +43,54 @@ export function ProductPanel({ products }: Props) {
   }, [products, query, categoryId]);
 
   return (
-    <div className="h-full rounded-xl border p-4 flex flex-col bg-card shadow-md">
-      <ProductToolbar
-        view={view}
-        onViewChange={setView}
-        onSearch={setQuery}
-        categoryId={categoryId}
-        onCategoryChange={setCategoryId}
-      />
+    /* PERBAIKAN 1: 
+       Hapus 'overflow-hidden' pada kontainer utama agar shadow dan efek hover 
+       tidak terpotong di bagian tepi.
+    */
+    <div className="h-full sm:rounded-[2.5rem] bg-white p-3 sm:p-6 flex flex-col sm:shadow-sm sm:border sm:border-slate-100/50 relative transition-all duration-300">
 
-      <div className="flex-1 overflow-auto mt-4">
-        {filteredProducts.length === 0 ? (
-          <div className="text-sm text-muted-foreground text-center py-10">
-            Produk tidak ditemukan
-          </div>
-        ) : view === "grid" ? (
-          <ProductGrid products={filteredProducts} />
-        ) : (
-          <ProductRowList products={filteredProducts} />
-        )}
+      {/* Background Decor */}
+      <div className="absolute -right-10 -top-10 w-24 h-24 sm:w-40 sm:h-40 bg-slate-50 rounded-full opacity-50 pointer-events-none" />
+
+      {/* PERBAIKAN 2: 
+          Sama seperti di atas, kita hilangkan 'overflow-hidden' di sini juga 
+          agar kartu bisa "naik" melewati batas container secara visual.
+      */}
+      <div className="relative z-10 flex flex-col h-full">
+        <ProductToolbar
+          view={view}
+          onViewChange={setView}
+          onSearch={setQuery}
+          categoryId={categoryId}
+          onCategoryChange={setCategoryId}
+          categories={uniqueCategories}
+        />
+
+        {/* PERBAIKAN 3: 
+            - Ganti 'custom-scrollbar' menjadi 'no-scrollbar' untuk menghilangkan batang scroll.
+            - Tambahkan 'pt-4' atau 'p-1' agar kartu baris atas punya ruang saat di-hover ke atas.
+        */}
+        <div className="flex-1 overflow-y-auto mt-3 sm:mt-6 no-scrollbar pb-24 lg:pb-0 flex flex-col pt-1 px-1">
+          {filteredProducts.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-4 py-20">
+              <div className="w-12 h-12 sm:w-16 sm:h-16 bg-slate-50 rounded-full flex items-center justify-center">
+                <span className="text-xl sm:text-2xl">🔍</span>
+              </div>
+              <p className="font-black text-[8px] sm:text-[10px] uppercase tracking-[0.2em] opacity-40">
+                Produk tidak ditemukan
+              </p>
+            </div>
+          ) : (
+            <div className="h-fit">
+              {view === "grid" ? (
+                <ProductGrid products={filteredProducts} />
+              ) : (
+                <ProductRowList products={filteredProducts} />
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
 }
-
-

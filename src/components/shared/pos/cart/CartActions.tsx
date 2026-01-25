@@ -8,7 +8,8 @@ import { PaymentSuccessModal } from "../payment/PaymentSuccessModal";
 import { useHoldOrderStore } from "@/store/useHoldOrderStore";
 import { syncOrderToCloud } from "@/app/(dashboard)/order/actions";
 import { toast } from "sonner";
-import { generateOrderId } from "@/lib/generateOrderId"; // ✅ Ditambahkan
+import { generateOrderId } from "@/lib/generateOrderId";
+import { CreditCard, Loader2, PauseCircle } from "lucide-react";
 
 export function CartActions() {
   const items = useCartStore((s) => s.items);
@@ -30,7 +31,6 @@ export function CartActions() {
     if (items.length === 0) return;
     setIsHolding(true);
 
-    // ✅ PERBAIKAN: Gunakan format POS-XXXX alih-alih random UUID
     const orderId = activeOrderId !== "" ? activeOrderId : generateOrderId("POS-");
     const now = new Date().toISOString();
 
@@ -39,13 +39,11 @@ export function CartActions() {
       createdAt: now,
       total: subtotal,
       paid: 0,
-      paymentMethod: "CASH" as const, // Default saat hold
+      paymentMethod: "CASH" as const,
       customerName: customerName || "Guest",
       orderType: orderType as "Dine In" | "Take Away",
       items: items.map((i) => {
-        // ✅ Ambil status isDone yang sudah ada (untuk update hold) tanpa menggunakan 'any'
         const itemWithStatus = i as unknown as { isDone?: boolean };
-
         return {
           id: i.productId,
           name: i.name,
@@ -53,7 +51,7 @@ export function CartActions() {
           price: i.price,
           categoryType: i.categoryType as "FOOD" | "DRINK",
           notes: i.notes || "",
-          isDone: itemWithStatus.isDone === true, // Tetap gunakan status lama jika ada
+          isDone: itemWithStatus.isDone === true,
         };
       }),
       isSynced: true,
@@ -61,14 +59,12 @@ export function CartActions() {
 
     try {
       const res = await syncOrderToCloud(orderData);
-
       if (res.success) {
         addHold({
           ...orderData,
           items: orderData.items.map(i => ({ ...i, productId: i.id }))
         });
-
-        toast.success(activeOrderId !== "" ? "Pesanan diperbarui di Dapur" : "Pesanan dikirim ke Dapur");
+        toast.success(activeOrderId !== "" ? "Pesanan diperbarui" : "Pesanan berhasil di-hold");
         resetOrder();
       } else {
         toast.error(`Gagal sinkron: ${res.error}`);
@@ -83,23 +79,38 @@ export function CartActions() {
 
   return (
     <>
-      <div className="flex gap-4">
+      <div className="flex gap-3 mt-1 px-1">
+        {/* Tombol HOLD: Dibuat lebih ramping dan taktil */}
         <Button
           variant="outline"
-          className="h-12 shadow-md cursor-pointer"
           disabled={isDisabled || isHolding}
           onClick={handleHoldClick}
+          className="h-12 w-16 sm:w-20 rounded-2xl border-slate-100 text-slate-400 hover:bg-orange-50 hover:text-orange-600 hover:border-orange-100 transition-all active:scale-95 disabled:opacity-30 flex flex-col gap-0 items-center justify-center shrink-0 shadow-sm"
         >
-          {isHolding ? "Processing..." : "Hold Order"}
+          {isHolding ? (
+            <Loader2 className="w-5 h-5 animate-spin text-orange-600" />
+          ) : (
+            <>
+              <PauseCircle className="w-5 h-5" strokeWidth={2.2} />
+              <span className="text-[8px] font-black uppercase tracking-tighter">Hold</span>
+            </>
+          )}
         </Button>
 
+        {/* Tombol PROSES BAYAR: The Hero Button */}
         <Button
           data-open-payment
           disabled={isDisabled || isHolding}
-          className="flex-1 h-12 shadow-md cursor-pointer text-coffee-soft"
           onClick={() => setOpenPayment(true)}
+          className="flex-1 h-12 rounded-2xl bg-cyan-600 hover:bg-cyan-700 text-white shadow-lg shadow-cyan-100/50 transition-all active:scale-[0.98] disabled:bg-slate-100 disabled:text-slate-400 disabled:shadow-none flex items-center justify-between px-5 group overflow-hidden"
         >
-          Proses Pembayaran
+          <div className="flex flex-col items-start">
+            <span className="text-[8px] font-bold uppercase tracking-[0.2em] opacity-70 leading-none mb-0.5">Checkout</span>
+            <span className="text-[12px] font-black uppercase tracking-wider">Proses Bayar</span>
+          </div>
+          <div className="bg-white/20 p-1.5 rounded-xl group-hover:bg-white/30 transition-colors">
+            <CreditCard className="w-5 h-5" />
+          </div>
         </Button>
       </div>
 

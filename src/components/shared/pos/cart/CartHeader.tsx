@@ -1,51 +1,43 @@
 "use client";
 
-import { Trash2, Hourglass } from "lucide-react";
+import { Trash2, ShoppingBag } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { useCartStore } from "@/store/useCartStore";
-import { useHoldOrderStore } from "@/store/useHoldOrderStore";
 
-type Props = {
-  onOpenHoldList: () => void;
-};
-
-export function CartHeader({ onOpenHoldList }: Props) {
+export function CartHeader() {
   const clearCart = useCartStore((s) => s.resetOrder);
-  const holdsCount = useHoldOrderStore((s) => s.holds.length);
+  const itemsCount = useCartStore((s) => s.items.length);
 
   return (
-    <div className="flex items-center justify-between border-b px-4 py-3">
-      <h2 className="text-lg font-semibold">Keranjang</h2>
+    <div className="flex items-center justify-between border-b border-slate-100/50 bg-white px-6 py-5">
 
-      <div className="flex items-center gap-2">
-        {/* HOLD LIST */}
-        <Button
-          size="icon"
-          variant="ghost"
-          onClick={onOpenHoldList}
-          className="relative border cursor-pointer"
-        >
-          <Hourglass className="h-5 w-5" />
-          {holdsCount > 0 && (
-            <Badge
-              className="absolute -top-1 -right-1 h-5 min-w-5 rounded-full px-1 text-xs"
-              variant="destructive"
-            >
-              {holdsCount}
-            </Badge>
-          )}
-        </Button>
+      <div className="flex items-center gap-3">
+        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-white shadow-lg shadow-slate-200">
+          <ShoppingBag size={22} strokeWidth={2.5} />
+        </div>
+        <div>
+          <h2 className="text-[14px] font-black uppercase tracking-tight text-slate-900 leading-none">
+            Current Order
+          </h2>
+          <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-cyan-600 mt-1.5">
+            {itemsCount} Menu Terpilih
+          </p>
+        </div>
+      </div>
 
-        {/* CLEAR CART */}
-        <Button
-          size="icon"
-          variant="ghost"
-          onClick={clearCart}
-          className="border cursor-pointer"
-        >
-          <Trash2 className="h-5 w-5" />
-        </Button>
+      <div className="flex items-center">
+        {itemsCount > 0 && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={clearCart}
+          
+            className="h-10 w-10 border border-slate-100 bg-white text-slate-400 hover:bg-red-50 hover:text-red-500 hover:border-red-100 rounded-xl transition-all duration-300 shadow-sm active:scale-90"
+            title="Bersihkan Semua Pesanan"
+          >
+            <Trash2 size={18} />
+          </Button>
+        )}
       </div>
     </div>
   );
