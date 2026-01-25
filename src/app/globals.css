@@ -75,45 +75,72 @@
     font-size: var(--font-size);
   }
 
-  h1, h2, h3, h4, label, button {
+  h1,
+  h2,
+  h3,
+  h4,
+  label,
+  button {
     font-weight: var(--font-weight-medium);
     line-height: 1.5;
   }
 }
 
 /* --- CUSTOM SCROLLBAR PREMIUM --- */
+/* --- CUSTOM UTILITIES --- */
 @layer utilities {
+  /* Hide scrollbar for Chrome, Safari and Opera */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Hide scrollbar for IE, Edge and Firefox */
+  .no-scrollbar {
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
+  }
+
+  /* --- CUSTOM SCROLLBAR PREMIUM (Tetap dipertahankan untuk List Produk) --- */
   .custom-scrollbar::-webkit-scrollbar {
-    /** Lebar scrollbar dibuat sangat tipis (4px) agar tidak mengganggu UI melengkung */
     width: 4px;
     height: 4px;
   }
-  
+
   .custom-scrollbar::-webkit-scrollbar-track {
-    /** Track transparan agar menyatu dengan background #f8fafc */
     background: transparent;
   }
-  
+
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    /** Warna slate-200 yang soft dengan border transparan sebagai padding */
     background: #e2e8f0;
     border-radius: 20px;
     background-clip: content-box;
   }
-  
+
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    /** Warna sedikit lebih gelap saat di-hover */
     background: #cbd5e1;
   }
 }
 
 /* PRINT RECEIPT 58MM */
 @media print {
-  @page { size: 58mm auto; margin: 0; }
-  body * { visibility: hidden; }
-  .print-receipt, .print-receipt * { visibility: visible; }
+  @page {
+    size: 58mm auto;
+    margin: 0;
+  }
+  body * {
+    visibility: hidden;
+  }
+  .print-receipt,
+  .print-receipt * {
+    visibility: visible;
+  }
   .print-receipt {
-    position: absolute; left: 0; top: 0; width: 52mm;
-    padding: 2mm; font-family: monospace; font-size: 11px;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 52mm;
+    padding: 2mm;
+    font-family: monospace;
+    font-size: 11px;
   }
 }

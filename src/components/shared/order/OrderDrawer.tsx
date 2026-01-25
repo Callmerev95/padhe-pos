@@ -21,7 +21,7 @@ import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { Printer, Trash2 } from "lucide-react";
 import { useOrderDetail } from "@/features/order-history/useOrderDetail";
-import { useReceiptStore } from "@/store/useReceiptStore";
+//import { useReceiptStore } from "@/store/useReceiptStore";
 import { deleteOrder } from "@/lib/db";
 import { toast } from "sonner"; // ✅ Tambahk
 import { printReceiptBluetooth } from "@/lib/printer-utils"; // ✅ Import printer utilsan toast untuk feedback
@@ -56,7 +56,7 @@ type Props = {
 // Komponen OrderDrawer
 export function OrderDrawer({ open, onClose, orderId }: Props) {
   const { order, loading } = useOrderDetail(orderId);
-  const setReceipt = useReceiptStore((s) => s.setReceipt);
+  //const setReceipt = useReceiptStore((s) => s.setReceipt);
 
   // State untuk mengontrol Alert Dialog
   const [showVoidAlert, setShowVoidAlert] = useState(false);

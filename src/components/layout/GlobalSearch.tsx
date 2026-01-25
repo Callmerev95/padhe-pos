@@ -1,15 +1,15 @@
 "use client";
 
-import { Search, Package, Receipt, ArrowRight, Loader2, Plus } from "lucide-react";
+import { Search, Package, Receipt, ArrowRight, Loader2, Plus, Command } from "lucide-react";
 import { useRef, useState, useEffect } from "react";
 import { useGlobalSearch } from "@/hooks/useGlobalSearch";
 import { useCartStore } from "@/store/useCartStore";
 import { usePathname, useRouter } from "next/navigation";
 import { type Product } from "@/components/shared/products/types";
 import { cn } from "@/lib/utils";
-// IMPORT BARU: Ambil store global
 import { useOrderStore } from "@/store/useOrderStore";
 
+// --- PROPS INTERFACE ---
 interface SearchItemProps {
   icon: React.ReactNode;
   title: string;
@@ -35,11 +35,9 @@ export function GlobalSearch() {
   const pathname = usePathname();
   const router = useRouter();
   const addItem = useCartStore((s) => s.addItem);
-  // TAMBAHAN: Panggil fungsi openOrder dari store
   const openOrder = useOrderStore((s) => s.openOrder);
 
   const { products, orders, isLoading } = useGlobalSearch(query);
-
   const allResults = [...products, ...orders];
 
   useEffect(() => {
@@ -63,17 +61,9 @@ export function GlobalSearch() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Effect baru: Jika di halaman recipes, update URL saat mengetik
-
-
   const handleSelectProduct = (p: Product) => {
     if (pathname === "/pos") {
-      addItem({
-        productId: p.id,
-        name: p.name,
-        price: p.price,
-        categoryType: p.categoryType,
-      });
+      addItem({ productId: p.id, name: p.name, price: p.price, categoryType: p.categoryType });
       setQuery("");
       setIsOpen(false);
       setSelectedIndex(0);
@@ -83,11 +73,9 @@ export function GlobalSearch() {
     }
   };
 
-  // UPDATE: Sekarang memanggil Global Store, bukan router.push
   const handleSelectOrder = (o: OrderResult) => {
     setQuery("");
     setIsOpen(false);
-    // Langsung buka drawer di halaman manapun user berada
     openOrder(o.id);
   };
 
@@ -95,18 +83,15 @@ export function GlobalSearch() {
     if (e.key === "ArrowDown") {
       e.preventDefault();
       setSelectedIndex((prev) => (prev < allResults.length - 1 ? prev + 1 : prev));
-    }
-    else if (e.key === "ArrowUp") {
+    } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setSelectedIndex((prev) => (prev > 0 ? prev - 1 : prev));
-    }
-    else if (e.key === "Enter") {
+    } else if (e.key === "Enter") {
       e.preventDefault();
       if (allResults.length > 0) {
-        const targetIndex = allResults.length === 1 ? 0 : selectedIndex;
-        const item = allResults[targetIndex];
-
+        const item = allResults[selectedIndex];
         if (item) {
+          // FIX: Menghilangkan warning @typescript-eslint/no-unused-expressions
           if ("price" in item) {
             handleSelectProduct(item as Product);
           } else {
@@ -114,44 +99,48 @@ export function GlobalSearch() {
           }
         }
       }
-    }
-    else if (e.key === "Escape") {
+    } else if (e.key === "Escape") {
       setIsOpen(false);
       inputRef.current?.blur();
     }
   };
 
   return (
-    <div className="relative w-full max-w-md" ref={containerRef}>
-      <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+    <div className="relative w-full max-w-md group" ref={containerRef}>
+      <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none z-10">
         {isLoading ? (
-          <Loader2 size={18} className="animate-spin text-cyan-500" />
+          <Loader2 size={18} className="animate-spin text-orange-500" />
         ) : (
-          <Search size={18} className="text-slate-400" />
+          <Search size={18} className="text-slate-400 group-focus-within:text-slate-900 transition-colors" />
         )}
       </div>
+
       <input
         ref={inputRef}
         type="text"
         value={query}
         onFocus={() => setIsOpen(true)}
         onKeyDown={handleKeyDown}
-        onChange={(e) => {
-          setQuery(e.target.value);
-          setIsOpen(true);
-          setSelectedIndex(0);
-        }}
-        placeholder="Cari transaksi, pelanggan, produk... (Ctrl+K)"
-        className="w-full bg-slate-50 border border-slate-100 py-2.5 pl-11 pr-4 rounded-2xl text-sm outline-none focus:bg-white focus:border-cyan-200 transition-all shadow-sm text-slate-900"
+        onChange={(e) => { setQuery(e.target.value); setIsOpen(true); setSelectedIndex(0); }}
+        placeholder="Cari transaksi atau produk..."
+        className="w-full h-12 bg-slate-50 border-2 border-transparent py-2.5 pl-12 pr-16 rounded-[1.25rem] text-sm font-bold outline-none focus:bg-white focus:border-slate-200 transition-all shadow-sm text-slate-900 placeholder:text-slate-400 placeholder:font-medium"
       />
 
+      <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none">
+        <kbd className="hidden sm:flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-200 bg-white text-[10px] font-black text-slate-400 shadow-sm">
+          <Command size={10} /> K
+        </kbd>
+      </div>
+
       {isOpen && query.length >= 2 && (
-        <div className="absolute top-full left-0 w-full mt-3 bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2">
-          <div className="max-h-80 overflow-y-auto p-2">
+        // FIX: rounded-[2rem] -> rounded-4xl
+        <div className="absolute top-[calc(100%+12px)] left-0 w-full bg-white rounded-4xl shadow-[0_20px_50px_rgba(0,0,0,0.15)] border border-slate-100 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2">
+          {/* FIX: max-h-[400px] -> max-h-100 */}
+          <div className="max-h-100 overflow-y-auto p-3">
 
             {products.length > 0 && (
               <div className="mb-4">
-                <p className="text-[10px] font-bold text-slate-400 px-3 py-2 uppercase tracking-widest">Produk</p>
+                <p className="text-[10px] font-black text-slate-400 px-4 py-2 uppercase tracking-[0.2em]">Produk Tersedia</p>
                 {products.map((p, index) => (
                   <div key={p.id} onClick={() => handleSelectProduct(p as Product)}>
                     <SearchItem
@@ -168,7 +157,7 @@ export function GlobalSearch() {
 
             {orders.length > 0 && (
               <div>
-                <p className="text-[10px] font-bold text-slate-400 px-3 py-2 uppercase tracking-widest">Transaksi</p>
+                <p className="text-[10px] font-black text-slate-400 px-4 py-2 uppercase tracking-[0.2em]">Riwayat Transaksi</p>
                 {orders.map((o, index) => {
                   const actualIndex = products.length + index;
                   return (
@@ -176,7 +165,7 @@ export function GlobalSearch() {
                       <SearchItem
                         icon={<Receipt size={16} />}
                         title={o.customerName || `Order #${o.id.slice(-4)}`}
-                        subtitle={`Total: Rp ${o.total.toLocaleString()} ${o.customerName ? `• #${o.id.slice(-4)}` : ''}`}
+                        subtitle={`Rp ${o.total.toLocaleString()} • #${o.id.slice(-4)}`}
                         isSelected={actualIndex === selectedIndex}
                       />
                     </div>
@@ -186,8 +175,11 @@ export function GlobalSearch() {
             )}
 
             {!isLoading && allResults.length === 0 && (
-              <div className="py-8 text-center text-slate-400 text-xs">
-                {`Tidak ada hasil untuk "${query}"`}
+              <div className="py-12 text-center">
+                <div className="inline-flex p-4 bg-slate-50 rounded-full mb-3">
+                   <Search size={24} className="text-slate-300" />
+                </div>
+                <p className="text-xs font-bold text-slate-400 italic">{`Tidak ditemukan hasil untuk "${query}"`}</p>
               </div>
             )}
           </div>
@@ -200,27 +192,31 @@ export function GlobalSearch() {
 function SearchItem({ icon, title, subtitle, rightIcon, isSelected }: SearchItemProps) {
   return (
     <div className={cn(
-      "flex items-center gap-3 p-3 rounded-2xl cursor-pointer group transition-all",
-      isSelected ? "bg-cyan-50 shadow-inner" : "hover:bg-slate-50"
+      "flex items-center gap-4 p-3 rounded-2xl cursor-pointer transition-all",
+      // FIX: Ganti slate-900 ke orange-50 agar lebih soft dan tidak mengalihkan fokus
+      isSelected ? "bg-orange-50 ring-1 ring-orange-100" : "hover:bg-slate-50"
     )}>
       <div className={cn(
-        "h-9 w-9 rounded-xl flex items-center justify-center transition-all",
-        isSelected ? "bg-white text-cyan-600 shadow-sm" : "bg-slate-100 text-slate-500"
+        "h-10 w-10 rounded-xl flex items-center justify-center transition-all",
+        isSelected ? "bg-white text-orange-600 shadow-sm" : "bg-white text-slate-400 border border-slate-100 shadow-sm"
       )}>
         {icon}
       </div>
       <div className="flex-1 text-left">
         <h4 className={cn(
-          "text-sm font-semibold transition-colors",
-          isSelected ? "text-cyan-900" : "text-slate-700"
+          "text-sm font-black tracking-tight transition-colors",
+          isSelected ? "text-orange-950" : "text-slate-700"
         )}>
           {title}
         </h4>
-        <p className="text-[11px] text-slate-400">{subtitle}</p>
+        <p className={cn(
+          "text-[11px] font-bold transition-colors",
+          isSelected ? "text-orange-600/80" : "text-slate-400"
+        )}>{subtitle}</p>
       </div>
       <div className={cn(
-        "transition-all",
-        isSelected ? "opacity-100 text-cyan-500 translate-x-0" : "opacity-0 text-slate-300"
+        "transition-all mr-2",
+        isSelected ? "opacity-100 text-orange-500 translate-x-0" : "opacity-0 text-slate-300"
       )}>
         {rightIcon || <ArrowRight size={14} />}
       </div>

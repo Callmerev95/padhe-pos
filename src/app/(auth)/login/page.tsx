@@ -75,7 +75,7 @@ export default function LoginPage() {
           className="object-cover"
         />
 
-       <div className="absolute inset-0 z-20 flex flex-col justify-center px-16 text-white">
+        <div className="absolute inset-0 z-20 flex flex-col justify-center px-16 text-white">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -90,17 +90,17 @@ export default function LoginPage() {
                 <p className="text-white/80">Point of Sale System</p>
               </div>
             </div>
-            
+
             <h2 className="text-3xl mb-4">
               Kelola Coffee Shop Anda dengan Mudah
             </h2>
             <p className="text-lg text-white/90 max-w-md">
-              Sistem kasir modern yang dirancang khusus untuk coffee shop. 
+              Sistem kasir modern yang dirancang khusus untuk coffee shop.
               Cepat, mudah, dan efisien.
             </p>
 
             <div className="mt-12 space-y-4">
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.6 }}
@@ -111,8 +111,8 @@ export default function LoginPage() {
                 </div>
                 <span className="text-white/90">Manajemen produk yang efektif</span>
               </motion.div>
-              
-              <motion.div 
+
+              <motion.div
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.8 }}
@@ -123,8 +123,8 @@ export default function LoginPage() {
                 </div>
                 <span className="text-white/90">Proses transaksi yang cepat</span>
               </motion.div>
-              
-              <motion.div 
+
+              <motion.div
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 1 }}
@@ -154,7 +154,7 @@ export default function LoginPage() {
               <Coffee className="h-7 w-7" />
             </div>
             <div>
-              <h1 className="text-2xl">Coffee POS</h1>
+              <h1 className="text-2xl">Padhe Coffee</h1>
             </div>
           </div>
 

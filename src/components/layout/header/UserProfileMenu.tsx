@@ -7,6 +7,7 @@ import { LogOut, User as UserIcon, CreditCard, Printer, ChevronDown } from "luci
 import { useAuth } from "@/context/auth-context";
 import { useRouter } from "next/navigation";
 import { ProfileModal } from "./ProfileModal";
+import { cn } from "@/lib/utils";
 
 export function UserProfileMenu() {
     const { user } = useAuth();
@@ -31,39 +32,87 @@ export function UserProfileMenu() {
 
     return (
         <div className="relative" ref={menuRef}>
-            <button onClick={() => setIsOpen(!isOpen)} className="flex items-center gap-3 rounded-full bg-slate-100/50 p-1.5 pr-4 border border-slate-200/20 shadow-md hover:bg-white transition-all">
-                <div className="relative h-9 w-9 overflow-hidden rounded-full border-2 border-white shadow-lg bg-slate-200">
-                    <Image src={user?.image || defaultAvatar} alt="Avatar" fill className="object-cover" sizes="36px" />
+            {/* TRIGGER BUTTON: Tetap solid dengan layout scannable */}
+            <button
+                onClick={() => setIsOpen(!isOpen)}
+                className="flex items-center gap-3 p-1 rounded-2xl hover:bg-slate-50 transition-all active:scale-95 group"
+            >
+                <div className="text-right leading-none hidden sm:block">
+                    <p className="text-sm font-black text-slate-900 tracking-tight">{user?.name || "Revangga"}</p>
+                    <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-[0.15em]">{user?.role || "ADMIN"}</p>
                 </div>
-                <div className="text-left leading-none">
-                    <p className="text-[11px] font-bold text-slate-700">{user?.name}</p>
-                    <p className="text-[9px] text-slate-400 mt-1 uppercase tracking-wider">{user?.role}</p>
+
+                <div className="relative group">
+                    <div className="h-11 w-11 rounded-2xl bg-slate-900 p-0.5 transition-transform">
+                        <div className="h-full w-full rounded-[0.9rem] bg-white overflow-hidden border-2 border-white relative">
+                            <Image
+                                src={user?.image || defaultAvatar}
+                                alt="Avatar"
+                                fill
+                                className="object-cover"
+                                sizes="44px"
+                            />
+                        </div>
+                    </div>
+                    {/* Indicator dengan rotasi halus */}
+                    <div className={cn(
+                        "absolute -bottom-1 -right-1 bg-white rounded-lg shadow-sm border border-slate-100 p-0.5 transition-transform duration-300",
+                        isOpen ? "rotate-180" : "rotate-0"
+                    )}>
+                        <ChevronDown size={12} className="text-slate-900" />
+                    </div>
                 </div>
-                <ChevronDown size={14} className={`text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
             </button>
 
+            {/* DROPDOWN MENU: Dirampingkan dari w-64 ke w-56 untuk tablet */}
             {isOpen && (
-                <div className="absolute top-full right-0 mt-3 w-64 p-2 bg-white border border-slate-100 shadow-2xl rounded-2xl z-50 animate-in fade-in slide-in-from-top-2">
-                    <div className="px-4 py-3 border-b border-slate-50 mb-2">
-                        <p className="text-xs font-bold text-slate-800">{user?.name}</p>
-                        <p className="text-[10px] text-muted-foreground">{user?.email}</p>
+                <div className="absolute top-[calc(100%+12px)] right-0 w-56 p-1.5 bg-white border border-slate-100 shadow-[0_15px_40px_rgba(0,0,0,0.08)] rounded-3xl z-50 animate-in fade-in slide-in-from-top-2">
+                    {/* Header Info yang lebih ramping */}
+                    <div className="px-3 py-3 border-b border-slate-50 mb-1">
+                        <div className="flex items-center gap-2 mb-1">
+                            <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            <p className="text-[10px] font-black text-slate-800 uppercase tracking-tighter">Status Online</p>
+                        </div>
+                        <p className="text-[10px] text-slate-400 font-medium truncate">{user?.email || "admin@padhe.com"}</p>
                     </div>
-                    <div className="space-y-1">
-                        <button onClick={() => { setIsOpen(false); setIsModalOpen(true); }} className="w-full flex items-center gap-3 px-3 py-2 text-[11px] text-slate-600 hover:bg-slate-50 rounded-xl transition-colors">
-                            <UserIcon size={15} className="text-slate-400" /> Profil Saya
+
+                    <div className="space-y-0.5">
+                        <button
+                            onClick={() => { setIsOpen(false); setIsModalOpen(true); }}
+                            className="w-full flex items-center gap-2.5 px-3 py-2.5 text-[10.5px] font-bold text-slate-600 hover:bg-slate-50 rounded-xl transition-all"
+                        >
+                            <div className="p-1 bg-slate-100 rounded-lg text-slate-500">
+                                <UserIcon size={14} />
+                            </div>
+                            Profil Saya
                         </button>
-                        <div className="py-1">
-                            <p className="px-3 py-1 text-[9px] font-bold text-slate-400 uppercase tracking-widest">Sistem</p>
-                            <Link href="/settings/payment" className="w-full flex items-center gap-3 px-3 py-2 text-[11px] text-slate-600 hover:bg-slate-50 rounded-xl">
-                                <CreditCard size={15} /> Payment
+
+                        <div className="pt-1.5">
+                            <p className="px-3 py-1.5 text-[8px] font-black text-slate-400 uppercase tracking-[0.15em]">Sistem</p>
+                            <Link href="/settings/payment" className="w-full flex items-center gap-2.5 px-3 py-2.5 text-[10.5px] font-bold text-slate-600 hover:bg-slate-50 rounded-xl transition-all">
+                                <div className="p-1 bg-slate-100 rounded-lg text-slate-500">
+                                    <CreditCard size={14} />
+                                </div>
+                                Payment Method
                             </Link>
-                            <Link href="/settings/printer" className="w-full flex items-center gap-3 px-3 py-2 text-[11px] text-slate-600 hover:bg-slate-50 rounded-xl">
-                                <Printer size={15} /> Printer
+                            <Link href="/settings/printer" className="w-full flex items-center gap-2.5 px-3 py-2.5 text-[10.5px] font-bold text-slate-600 hover:bg-slate-50 rounded-xl transition-all">
+                                <div className="p-1 bg-slate-100 rounded-lg text-slate-500">
+                                    <Printer size={14} />
+                                </div>
+                                Konfigurasi Printer
                             </Link>
                         </div>
                     </div>
-                    <button onClick={handleLogout}  className="w-full mt-2 pt-2 border-t border-slate-50 flex items-center gap-3 px-3 py-2 text-[11px] text-rose-500 font-bold hover:bg-rose-50 rounded-xl transition-all duration-200 group">
-                        <LogOut size={15} /> Keluar
+
+                    {/* Logout Button dengan area touch yang pas */}
+                    <button
+                        onClick={handleLogout}
+                        className="w-full mt-2 pt-2 border-t border-slate-50 flex items-center gap-2.5 px-3 py-2.5 text-[10.5px] text-rose-500 font-black hover:bg-rose-50 rounded-xl transition-all group"
+                    >
+                        <div className="p-1 bg-rose-100/50 rounded-lg text-rose-500 group-hover:bg-rose-500 group-hover:text-white transition-colors">
+                            <LogOut size={14} />
+                        </div>
+                        Keluar Aplikasi
                     </button>
                 </div>
             )}
