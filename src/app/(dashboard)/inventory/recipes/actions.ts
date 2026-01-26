@@ -25,6 +25,20 @@ export async function addRecipeItem(data: {
   }
 }
 
+// FIX: Tambah fungsi Update agar lebih praktis [cite: 2026-01-12]
+export async function updateRecipeItem(id: string, quantity: number) {
+  try {
+    await db.recipe.update({
+      where: { id },
+      data: { quantity },
+    });
+    revalidatePath("/inventory/recipes");
+    return { success: true };
+  } catch {
+    return { success: false, error: "Gagal memperbarui jumlah bahan" };
+  }
+}
+
 // Fungsi untuk menghapus item resep
 export async function deleteRecipeItem(id: string) {
   try {

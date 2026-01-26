@@ -1,36 +1,12 @@
 import { getStockLogs } from "../actions";
 import HistoryClient from "./HistoryClient";
+import { StockLogUI } from "../types/ingredient.types";
 
-// Definisikan interface yang sesuai dengan data dari StockLog
-interface StockLogItem {
-  id: string;
-  type: "IN" | "OUT" | "ADJUSTMENT";
-  quantity: number;
-  previousStock: number;
-  currentStock: number;
-  note: string | null;
-  createdAt: Date;
-  ingredient: {
-    name: string;
-    unitUsage: string;
-  };
-}
+export default async function HistoryPage() {
+  const result = await getStockLogs();
 
-interface PageProps {
-  searchParams: Promise<{ date?: string }>;
-}
+  // Pastikan data di-cast ke interface yang benar, bukan any
+  const logs = (result.success && result.data ? result.data : []) as StockLogUI[];
 
-export default async function StockHistoryPage({ searchParams }: PageProps) {
-  const params = await searchParams;
-  const selectedDate = params.date ? new Date(params.date) : new Date();
-
-  const response = await getStockLogs({
-    startDate: selectedDate,
-    endDate: selectedDate
-  });
-  
-  // FIX: Casting menggunakan interface StockLogItem[], bukan 'any'
-  const logs = (response.data as unknown as StockLogItem[]) || [];
-
-  return <HistoryClient initialLogs={logs} />;
+  return <HistoryClient logs={logs} />;
 }

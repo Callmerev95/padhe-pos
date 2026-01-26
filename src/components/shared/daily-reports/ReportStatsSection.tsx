@@ -10,8 +10,8 @@ interface ReportStatsProps {
   count: number;
 }
 
-export function ReportStatsSection({ 
-  foodRevenue, foodQty, drinkRevenue, drinkQty, totalRevenue, count 
+export function ReportStatsSection({
+  foodRevenue, foodQty, drinkRevenue, drinkQty, totalRevenue, count
 }: ReportStatsProps) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 shrink-0">
@@ -51,7 +51,7 @@ export function ReportStatsSection({
       <Card className="rounded-4xl border-none shadow-2xl shadow-cyan-200/30 bg-slate-900 overflow-hidden group transition-all duration-500">
         <CardContent className="p-6 relative">
           <div className="absolute inset-0 bg-linear-to-br from-cyan-600/20 to-transparent opacity-50" />
-          <p className="text-[10px] font-black text-cyan-400/60 uppercase tracking-[0.15em] mb-1 relative z-10">Total Omset Bersih</p>
+          <p className="text-[10px] font-black text-cyan-400/60 uppercase tracking-[0.15em] mb-1 relative z-10">Total Omset</p>
           <h3 className="text-2xl font-black text-white tracking-tight relative z-10">
             Rp {totalRevenue.toLocaleString("id-ID")}
           </h3>

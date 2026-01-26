@@ -1,26 +1,33 @@
 import { Warehouse } from "lucide-react";
 import { getIngredients } from "../ingredients/actions";
 import { RestockForm } from "./RestockForm";
+import { PremiumHeader } from "@/components/shared/header/PremiumHeader";
+import { CreditNote } from "@/components/shared/order/CreditNote";
 
 export default async function RestockPage() {
   const response = await getIngredients();
   const ingredients = response.data || [];
 
   return (
-    <div className="flex flex-col gap-6 p-8 max-w-2xl mx-auto">
-      <div className="flex items-center gap-4">
-        <div className="w-12 h-12 bg-slate-900 rounded-2xl flex items-center justify-center">
-          <Warehouse className="h-6 w-6 text-white" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-black tracking-tight text-slate-900 uppercase">Stok Masuk</h1>
-          <p className="text-sm text-slate-500">Input nota belanjaan bahan baku di sini.</p>
-        </div>
-      </div>
+    <div className="flex flex-col h-[calc(100vh-180px)] gap-6 animate-in fade-in duration-700">
+      <PremiumHeader 
+        icon={Warehouse}
+        title="INPUT STOK MASUK"
+        subtitle="CATAT NOTA BELANJA DAN UPDATE OTOMATIS HPP BAHAN"
+      />
 
-      <div className="bg-white border border-slate-100 rounded-4xl p-8 shadow-sm">
-        <RestockForm ingredients={ingredients} />
+      <div className="flex-1 flex items-center justify-center p-4">
+        <div className="w-full max-w-xl bg-white/80 backdrop-blur-xl border border-white shadow-2xl shadow-slate-200/50 rounded-[3rem] p-10 relative overflow-hidden">
+          {/* Decorative background element */}
+          <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 bg-emerald-50 rounded-full blur-3xl opacity-50" />
+          
+          <div className="relative z-10">
+            <RestockForm ingredients={ingredients} />
+          </div>
+        </div>
       </div>
+      
+      <CreditNote />
     </div>
   );
 }
