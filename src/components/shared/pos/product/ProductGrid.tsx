@@ -1,4 +1,4 @@
-import type { Product } from "@/components/shared/products/types";
+import type { ProductUI as Product } from "@/app/(dashboard)/products/types/product.types";
 import { ProductCard } from "./ProductCard";
 
 type Props = {

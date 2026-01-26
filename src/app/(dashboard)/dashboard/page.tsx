@@ -6,7 +6,7 @@ import { getLowStockSummary } from "../inventory/ingredients/actions";
 import { getDashboardProfitData } from "./actions";
 import { OrderFromCloud } from "./types/dashboard.types";
 
-export const revalidate = 0; 
+export const revalidate = 0;
 export const runtime = "nodejs";
 
 export default async function DashboardPage() {
@@ -40,8 +40,6 @@ export default async function DashboardPage() {
     getDashboardProfitData()
   ]);
 
-  const criticalItems = lowStockRes.items || [];
-
   // mapping profit data dengan fallback nilai 0 jika gagal
   const profitData = {
     revenue: profitAnalysis.success ? (profitAnalysis.revenue ?? 0) : 0,
@@ -52,10 +50,10 @@ export default async function DashboardPage() {
   };
 
   return (
-    <DashboardClient 
+    <DashboardClient
       // Casting aman tanpa menggunakan 'any'
-      initialOrders={orders as unknown as OrderFromCloud[]} 
-      lowStockItems={criticalItems} 
+      initialOrders={orders as unknown as OrderFromCloud[]}
+      lowStockItems={lowStockRes.success && lowStockRes.data ? lowStockRes.data : []}
       profitData={profitData}
     />
   );

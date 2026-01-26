@@ -5,9 +5,10 @@ import { useRef, useState, useEffect } from "react";
 import { useGlobalSearch } from "@/hooks/useGlobalSearch";
 import { useCartStore } from "@/store/useCartStore";
 import { usePathname, useRouter } from "next/navigation";
-import { type Product } from "@/components/shared/products/types";
+import type { ProductUI as Product } from "@/app/(dashboard)/products/types/product.types";
 import { cn } from "@/lib/utils";
 import { useOrderStore } from "@/store/useOrderStore";
+
 
 // --- PROPS INTERFACE ---
 interface SearchItemProps {
@@ -177,7 +178,7 @@ export function GlobalSearch() {
             {!isLoading && allResults.length === 0 && (
               <div className="py-12 text-center">
                 <div className="inline-flex p-4 bg-slate-50 rounded-full mb-3">
-                   <Search size={24} className="text-slate-300" />
+                  <Search size={24} className="text-slate-300" />
                 </div>
                 <p className="text-xs font-bold text-slate-400 italic">{`Tidak ditemukan hasil untuk "${query}"`}</p>
               </div>

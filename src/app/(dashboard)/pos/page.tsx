@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { ProductPanel } from "@/components/shared/pos/product/ProductPanel";
-import type { Product } from "@/components/shared/products/types";
+import type { ProductUI as Product } from "@/app/(dashboard)/products/types/product.types";
 import { toCategoryColor } from "@/lib/category-colors";
 import { CartPanel } from "@/components/shared/pos/cart/CartPanel";
 import { PosInitializer } from "./PosInitializer";

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { Product } from "@/components/shared/products/types";
+import type { ProductUI as Product } from "@/app/(dashboard)/products/types/product.types";
 import { ProductToolbar } from "./ProductToolbar";
 import { ProductGrid } from "./ProductGrid";
 import { ProductRowList } from "./ProductRowList";

@@ -1,6 +1,6 @@
 import { useMemo, useEffect, useState } from "react";
 import { useOrderHistory } from "@/features/order-history/useOrderHistory";
-import { type Product } from "@/components/shared/products/types";
+import type { ProductUI as Product } from "@/app/(dashboard)/products/types/product.types";
 import { getProducts } from "@/app/(dashboard)/products/actions";
 
 export function useGlobalSearch(query: string) {

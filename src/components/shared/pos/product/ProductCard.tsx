@@ -1,6 +1,7 @@
 "use client";
 
-import type { Product } from "@/components/shared/products/types";
+import type { ProductUI as Product } from "@/app/(dashboard)/products/types/product.types";
+
 import { useCartStore } from "@/store/useCartStore";
 import { Plus, Coffee, Utensils } from "lucide-react";
 import Image from "next/image";
