@@ -2,7 +2,7 @@
 
 import { prisma as db } from "@/lib/prisma";
 import { startOfMonth, endOfMonth } from "date-fns";
-import { type OrderItem } from "@/lib/db";
+import { OrderItemSchema, OrderItem } from "./types/dashboard.types";
 
 export async function getDashboardProfitData() {
   try {
@@ -10,7 +10,7 @@ export async function getDashboardProfitData() {
     const firstDay = startOfMonth(now);
     const lastDay = endOfMonth(now);
 
-    // 1. Ambil Semua Order Bulan Ini (untuk menghitung Revenue & HPP)
+    // 1. Ambil Semua Order Bulan Ini
     const orders = await db.order.findMany({
       where: {
         createdAt: { gte: firstDay, lte: lastDay }
@@ -18,56 +18,55 @@ export async function getDashboardProfitData() {
     });
 
     let totalRevenue = 0;
-    let totalCOGS = 0;
+    const itemsToProcess: OrderItem[] = [];
 
-    // 2. Kalkulasi Revenue & HPP Real berdasarkan Recipe
-    for (const order of orders) {
+    // 2. Kumpulkan semua OrderItem dan hitung Revenue
+    orders.forEach(order => {
       totalRevenue += order.total;
-
-      // Parse items dari JSON
-      const items = (typeof order.items === 'string' 
-        ? JSON.parse(order.items) 
-        : order.items) as OrderItem[];
-
-      for (const item of items) {
-        // Casting ke tipe yang kita inginkan tanpa menggunakan 'any'
-        const orderItem = item as OrderItem & { productId?: string };
-        const pId = orderItem.productId;
-
-        // Proteksi: kalau productId kosong (mencegah Prisma error)
-        if (!pId) continue;
-
-        const productWithRecipe = await db.product.findUnique({
-          where: { id: pId }, 
-          include: {
-            recipes: {
-              include: {
-                ingredient: true
-              }
-            }
-          }
+      
+      const parsed = typeof order.items === 'string' ? JSON.parse(order.items) : order.items;
+      if (Array.isArray(parsed)) {
+        parsed.forEach(i => {
+          const result = OrderItemSchema.safeParse(i);
+          if (result.success) itemsToProcess.push(result.data);
         });
+      }
+    });
 
-        if (productWithRecipe && productWithRecipe.recipes.length > 0) {
-          const hppPerUnit = productWithRecipe.recipes.reduce((acc, recipe) => {
-            const ingredientPrice = recipe.ingredient.averagePrice || 0;
-            const cost = recipe.quantity * ingredientPrice;
-            return acc + cost;
-          }, 0);
-
-          totalCOGS += (hppPerUnit * (orderItem.qty || 0));
+    // 3. OPTIMASI: Ambil SEMUA data produk & resep yang terlibat dalam SATU query
+    const uniqueProductIds = Array.from(new Set(itemsToProcess.map(i => i.id)));
+    const productsData = await db.product.findMany({
+      where: { id: { in: uniqueProductIds } },
+      include: {
+        recipes: {
+          include: { ingredient: true }
         }
       }
-    }
+    });
 
-    // 3. Ambil Total Biaya Operasional (Expenses)
+    // Masukkan ke Map agar lookup lebih cepat (O(1))
+    const productMap = new Map(productsData.map(p => [p.id, p]));
+
+    // 4. Kalkulasi COGS (HPP) tanpa hit ke DB lagi
+    let totalCOGS = 0;
+    itemsToProcess.forEach(item => {
+      const product = productMap.get(item.id);
+      if (product && product.recipes.length > 0) {
+        const hppPerUnit = product.recipes.reduce((acc, recipe) => {
+          const ingredientPrice = recipe.ingredient.averagePrice || 0;
+          return acc + (recipe.quantity * ingredientPrice);
+        }, 0);
+        totalCOGS += (hppPerUnit * item.qty);
+      }
+    });
+
+    // 5. Ambil Total Biaya Operasional
     const expenseData = await db.expense.aggregate({
       where: { date: { gte: firstDay, lte: lastDay } },
       _sum: { amount: true }
     });
     const totalExpenses = expenseData._sum.amount || 0;
 
-    // 4. Kalkulasi Final Laba Rugi
     const grossProfit = totalRevenue - totalCOGS;
     const netProfit = grossProfit - totalExpenses;
 
