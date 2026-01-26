@@ -1,9 +1,10 @@
 import { getCategories } from "./actions";
-import { CategoryTable } from "@/components/shared/categories/CategoryTable";
+import { CategoriesClient } from "./CategoriesClient";
+import { CategoryUI } from "./types/category.types";
 
 export default async function CategoriesPage() {
   const categories = await getCategories();
 
-  // JANGAN bungkus dengan div min-h-full agar tidak ada margin ekstra
-  return <CategoryTable data={categories} />;
+  // Kita cast ke CategoryUI karena prisma return Date object yang cocok
+  return <CategoriesClient initialData={categories as CategoryUI[]} />;
 }
