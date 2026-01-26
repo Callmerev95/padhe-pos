@@ -12,11 +12,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { PremiumHeader } from "@/components/shared/header/PremiumHeader";
 
+// Kita buat tipenya lebih eksplisit agar sinkron dengan hook useProductLogic
 type ProductHeaderProps = {
   total: number;
   onAdd?: () => void;
   statusFilter?: "all" | "active" | "inactive";
-  onStatusChange?: (v: "all" | "active" | "inactive") => void;
+  onStatusChange?: (v: string) => void; // Kita gunakan string agar fleksibel dengan router.replace
 };
 
 export function ProductHeader({
@@ -27,7 +28,6 @@ export function ProductHeader({
 }: ProductHeaderProps) {
   return (
     <div className="flex flex-col gap-2">
-      {/* UPDATE: Subtitle diselaraskan dengan gaya Riwayat Transaksi */}
       <PremiumHeader
         icon={Coffee}
         title="DAFTAR PRODUK"
@@ -43,7 +43,8 @@ export function ProductHeader({
         }
       />
 
-      <div className="bg-white/60 backdrop-blur-md p-2 rounded-[2.5rem] border border-whitåçe shadow-xl shadow-slate-200/30 flex items-center justify-between px-6 h-14">
+      {/* FIX: Perbaikan typo border-whitåçe dan penyesuaian warna */}
+      <div className="bg-white/60 backdrop-blur-md p-2 rounded-[2.5rem] border border-white shadow-xl shadow-slate-200/30 flex items-center justify-between px-6 h-14">
         <div className="flex items-center gap-3">
           <div className="bg-cyan-50 p-2 rounded-xl">
             <PackageSearch size={16} className="text-cyan-600" />
@@ -63,34 +64,41 @@ export function ProductHeader({
             <DropdownMenuTrigger asChild>
               <Button
                 variant="outline"
-                className="rounded-xl border-slate-100 bg-white text-slate-600 text-[10px] font-black uppercase hover:bg-slate-50 h-9 px-4 shadow-sm border-2 gap-2"
+                className="rounded-xl border-slate-100 bg-white text-slate-600 text-[10px] font-black uppercase hover:bg-slate-50 h-9 px-4 shadow-sm border-2 gap-2 transition-all"
               >
                 <Filter size={12} className="text-slate-400" />
-                Filter: {statusFilter.toUpperCase()}
+                Filter: <span className="text-cyan-600">{statusFilter.toUpperCase()}</span>
               </Button>
             </DropdownMenuTrigger>
 
-            {/* FIX: Tambahkan bg-white solid dan z-[100] */}
+            {/* FIX: Menggunakan z-50 standar dan memastikan bg-white */}
             <DropdownMenuContent
               align="end"
-              className="w-56 rounded-2xl border-slate-100 shadow-2xl p-2 bg-white z-100"
+              className="w-56 rounded-2xl border-slate-100 shadow-2xl p-2 bg-white z-50"
             >
               <DropdownMenuLabel className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-3 py-2">
                 Pilih Status
               </DropdownMenuLabel>
               <DropdownMenuRadioGroup
                 value={statusFilter}
-                onValueChange={(v) =>
-                  onStatusChange?.(v as "all" | "active" | "inactive")
-                }
+                onValueChange={(v) => onStatusChange?.(v)}
               >
-                <DropdownMenuRadioItem value="all" className="text-[11px] font-bold py-2 rounded-lg cursor-pointer focus:bg-slate-50">
+                <DropdownMenuRadioItem 
+                  value="all" 
+                  className="text-[11px] font-bold py-2.5 rounded-xl cursor-pointer focus:bg-cyan-50 focus:text-cyan-600 transition-colors"
+                >
                   Semua Produk
                 </DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="active" className="text-[11px] font-bold py-2 rounded-lg cursor-pointer focus:bg-slate-50">
+                <DropdownMenuRadioItem 
+                  value="active" 
+                  className="text-[11px] font-bold py-2.5 rounded-xl cursor-pointer focus:bg-cyan-50 focus:text-cyan-600 transition-colors"
+                >
                   Hanya Aktif
                 </DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="inactive" className="text-[11px] font-bold py-2 rounded-lg cursor-pointer focus:bg-slate-50">
+                <DropdownMenuRadioItem 
+                  value="inactive" 
+                  className="text-[11px] font-bold py-2.5 rounded-xl cursor-pointer focus:bg-cyan-50 focus:text-cyan-600 transition-colors"
+                >
                   Nonaktif
                 </DropdownMenuRadioItem>
               </DropdownMenuRadioGroup>

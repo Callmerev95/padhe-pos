@@ -1,71 +1,45 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { ProductList } from "@/components/shared/products/ProductList";
-import { ProductHeader } from "@/components/shared/products/ProductHeader";
-import { CreateProductDialog } from "@/components/shared/products/CreateProductDialog";
+// 1. UPDATE: Import dari folder local (components), bukan shared lagi
+import { ProductList } from "./components/ProductList";
+import { ProductHeader } from "./components/ProductHeader";
+import { CreateProductDialog } from "./components/CreateProductDialog";
 import { OrderFooter } from "@/components/shared/order/OrderFooter";
 import { CreditNote } from "@/components/shared/order/CreditNote";
-import type { Product } from "@/components/shared/products/types";
-import { useRouter, useSearchParams } from "next/navigation";
+
+// 2. UPDATE: Hapus import Product lama, hanya pakai ProductUI
+import { ProductUI } from "./types/product.types";
+import { useProductLogic } from "./hooks/useProductLogic";
 
 type CategoryOption = { id: string; name: string };
 
-type Props = {
-  initialProducts: Product[];
+interface Props {
+  initialProducts: ProductUI[];
   initialCategories?: CategoryOption[];
-};
-
-function getParam<T extends string>(
-  value: string | null,
-  allowed: readonly T[],
-  fallback: T
-): T {
-  return allowed.includes(value as T) ? (value as T) : fallback;
 }
 
 export function ProductsClient({ initialProducts, initialCategories }: Props) {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-
-  const statusFilter = getParam(
-    searchParams.get("status"),
-    ["all", "active", "inactive"] as const,
-    "all"
-  );
-
-  const [products, setProducts] = useState<Product[]>(initialProducts ?? []);
-  const [open, setOpen] = useState(false);
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-
-  function handleCreated(newProduct: Product) {
-    setProducts((prev) => [newProduct, ...prev]);
-  }
-
-  function handleUpdated(updated: Product) {
-    setProducts((prev) =>
-      prev.map((p) => (p.id === updated.id ? updated : p))
-    );
-  }
-
-  const filteredProducts = useMemo(() => {
-    return products
-      .filter((p) => {
-        if (statusFilter === "active" && !p.isActive) return false;
-        if (statusFilter === "inactive" && p.isActive) return false;
-        return true;
-      })
-      .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
-  }, [products, statusFilter]);
+  const {
+    products,
+    statusFilter,
+    open,
+    setOpen,
+    editingProduct,
+    setEditingProduct,
+    handleCreated,
+    handleUpdated,
+    handleStatusChange,
+    handleDeactivate, // Ambil fungsi deactivate dari hook
+  } = useProductLogic(initialProducts);
 
   return (
     <div className="flex flex-col h-[calc(100vh-180px)] gap-4 animate-in fade-in duration-700 overflow-hidden pr-2">
 
       <div className="shrink-0">
         <ProductHeader
-          total={filteredProducts.length}
+          total={products.length}
           statusFilter={statusFilter}
-          onStatusChange={(v) => router.replace(`?status=${v}`, { scroll: false })}
+          onStatusChange={handleStatusChange}
           onAdd={() => {
             setEditingProduct(null);
             setOpen(true);
@@ -85,21 +59,22 @@ export function ProductsClient({ initialProducts, initialCategories }: Props) {
         product={editingProduct}
       />
 
-      {/* CONTAINER UTAMA DENGAN SHADOW DAN ROUNDED PREMIUM */}
       <div className="flex-1 min-h-0 flex flex-col bg-white rounded-[3rem] border border-slate-100 shadow-2xl shadow-slate-200/50 overflow-hidden transition-all duration-500 hover:border-cyan-100">
-        {/* FIX: Area tabel menggunakan #fafbfc untuk background dasar */}
         <div className="flex-1 overflow-y-auto custom-scrollbar relative bg-[#fafbfc] pb-12">
+          {/* 3. FIX: Buang semua 'as unknown as' dan casting lainnya */}
           <ProductList
-            products={filteredProducts}
+            products={products}
             onEdit={(p) => {
               setEditingProduct(p);
               setOpen(true);
             }}
-            onDeactivate={handleUpdated}
+            // UBAH BAGIAN INI:
+            // Kita ambil properti id dari object p sebelum dikirim ke hook
+            onDeactivate={(p) => handleDeactivate(p.id)}
           />
         </div>
 
-        <OrderFooter count={filteredProducts.length} label="Produk Terdaftar" />
+        <OrderFooter count={products.length} label="Produk Terdaftar" />
       </div>
 
       <CreditNote />

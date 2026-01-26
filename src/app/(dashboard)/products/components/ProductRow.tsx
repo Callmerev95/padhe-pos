@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { motion } from "motion/react";
-import type { Variants } from "motion";
+import { motion, Variants } from "framer-motion"; // Pastikan import framer-motion yang stabil
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type { Product } from "./types";
+// PENYESUAIAN: Path ke types yang baru
+import { ProductUI } from "../types/product.types";
 import { CATEGORY_COLOR_STYLES, toCategoryColor } from "@/lib/category-colors";
 import { Button } from "@/components/ui/button";
 import { Pencil, ImageIcon, MoreHorizontal, Trash2 } from "lucide-react";
@@ -31,19 +31,22 @@ import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
 
-const itemVariants = {
+const itemVariants: Variants = {
   hidden: { opacity: 0, y: 6 },
   show: { opacity: 1, y: 0, transition: { duration: 0.25 } },
-} as unknown as Variants;
+};
 
-export function ProductRow({ product, onEdit, onDeactivate }: {
-  product: Product;
-  onEdit?: (p: Product) => void;
-  onDeactivate?: (p: Product) => void;
-}) {
+interface ProductRowProps {
+  product: ProductUI;
+  onEdit?: (p: ProductUI) => void;
+  onDeactivate?: (p: ProductUI) => void;
+}
+
+export function ProductRow({ product, onEdit, onDeactivate }: ProductRowProps) {
   const [isLoaded, setIsLoaded] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
 
+  // Ambil style kategori berdasarkan color dari database
   const colorKey = toCategoryColor(product.category.color);
   const styles = CATEGORY_COLOR_STYLES[colorKey];
 
@@ -52,16 +55,14 @@ export function ProductRow({ product, onEdit, onDeactivate }: {
       variants={itemVariants}
       layout
       whileHover="hover"
-      initial="initial"
-      // LOCK UI: Gabungan shadow elevasi dan glow biru neon (cyan 0.15 opacity)
+      initial="show" // Set ke show agar tidak hilang saat re-render
       className={cn(
         "group transition-all duration-500 relative border-b border-slate-100/50 bg-white",
-        "hover:z-20 hover:bg-white hover:shadow-[0_0_25px_rgba(34,211,238,0.15),0_10px_15px_-3px_rgba(0,0,0,0.05)]"
+        "hover:z-10 hover:bg-white hover:shadow-[0_0_25px_rgba(34,211,238,0.15),0_10px_15px_-3px_rgba(0,0,0,0.05)]"
       )}
     >
       {/* 1. INFO PRODUK */}
       <td className="pl-8 pr-6 py-5 relative">
-        {/* INDIKATOR AKTIF (Cyan Vertical Line) */}
         <div className="absolute inset-y-0 left-0 w-1 bg-cyan-500 scale-y-0 group-hover:scale-y-100 transition-transform duration-500 origin-center" />
 
         <div className="flex gap-5 items-center">
@@ -74,7 +75,10 @@ export function ProductRow({ product, onEdit, onDeactivate }: {
                     src={product.imageUrl}
                     alt={product.name}
                     fill
-                    className={cn("object-cover transition-opacity duration-500", isLoaded ? "opacity-100" : "opacity-0")}
+                    className={cn(
+                      "object-cover transition-opacity duration-500",
+                      isLoaded ? "opacity-100" : "opacity-0"
+                    )}
                     onLoadingComplete={() => setIsLoaded(true)}
                   />
                 </>
@@ -105,16 +109,13 @@ export function ProductRow({ product, onEdit, onDeactivate }: {
       </td>
 
       {/* 3. KATEGORI */}
-      <td className="px-6 py-5 text-center">
-        <motion.div
-          variants={{ hover: { scale: 1.12 } }}
-          className="inline-flex items-center gap-2"
-        >
-          <span className={cn("h-2 w-2 rounded-full", styles.dot)} />
-          <Badge className={cn(styles.badge, "rounded-xl border-none font-black text-[9px] py-0.5 px-3 uppercase tracking-wider shadow-sm")}>
+      <td className="px-6 py-5">
+        <div className="flex items-center gap-2">
+          <span className={cn("h-2 w-2 rounded-full shrink-0", styles.dot)} />
+          <Badge className={cn(styles.badge, "rounded-xl border-none font-black text-[9px] py-0.5 px-3 uppercase tracking-wider shadow-sm whitespace-nowrap")}>
             {product.category.name}
           </Badge>
-        </motion.div>
+        </div>
       </td>
 
       {/* 4. HARGA */}
@@ -123,19 +124,18 @@ export function ProductRow({ product, onEdit, onDeactivate }: {
       </td>
 
       {/* 5. STATUS PRODUK */}
-      <td className="px-6 py-5 text-center">
-        <motion.div variants={{ hover: { scale: 1.12 } }} className="inline-block">
-          <Badge className={cn(
-            "rounded-xl font-black text-[9px] uppercase tracking-[0.15em] border-none px-3 py-1 shadow-sm transition-all duration-300",
-            product.isActive
-              ? "bg-emerald-100 text-emerald-700 shadow-emerald-100/30 group-hover:bg-emerald-500 group-hover:text-white"
-              : "bg-slate-100 text-slate-400 shadow-slate-100"
-          )}>
-            {product.isActive ? "Tersedia" : "Nonaktif"}
-          </Badge>
-        </motion.div>
+      <td className="px-6 py-5">
+        <Badge className={cn(
+          "rounded-xl font-black text-[9px] uppercase tracking-[0.15em] border-none px-3 py-1 shadow-sm transition-all duration-300",
+          product.isActive
+            ? "bg-emerald-100 text-emerald-700 shadow-emerald-100/30 group-hover:bg-emerald-500 group-hover:text-white"
+            : "bg-slate-100 text-slate-400 shadow-slate-100"
+        )}>
+          {product.isActive ? "Tersedia" : "Nonaktif"}
+        </Badge>
       </td>
 
+      {/* 6. AKSI */}
       <td className="px-6 py-5 text-right">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -147,10 +147,9 @@ export function ProductRow({ product, onEdit, onDeactivate }: {
               <MoreHorizontal size={18} />
             </Button>
           </DropdownMenuTrigger>
-          {/* FIX: Tambahkan bg-white solid dan z-[100] agar tidak tembus pandang */}
           <DropdownMenuContent
             align="end"
-            className="w-48 rounded-2xl border-slate-100 shadow-2xl p-2 bg-white z-100"
+            className="w-48 rounded-2xl border-slate-100 shadow-2xl p-2 bg-white z-50"
           >
             <DropdownMenuItem
               onClick={() => onEdit?.(product)}
@@ -168,11 +167,11 @@ export function ProductRow({ product, onEdit, onDeactivate }: {
         </DropdownMenu>
 
         <AlertDialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
-          <AlertDialogContent className="rounded-[2.5rem] border-none shadow-2xl p-8">
+          <AlertDialogContent className="rounded-[2.5rem] border-none shadow-2xl p-8 bg-white">
             <AlertDialogHeader>
               <AlertDialogTitle className="text-xl font-black text-slate-800 uppercase tracking-tight">Nonaktifkan Produk</AlertDialogTitle>
               <AlertDialogDescription className="text-slate-400 font-medium">
-                Produk ini tidak akan muncul di POS, tetapi data tetap tersimpan dalam sistem.
+                Produk <span className="text-slate-900 font-bold">{product.name}</span> tidak akan muncul di POS, tetapi data tetap tersimpan dalam sistem.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter className="mt-6 gap-3">
@@ -180,14 +179,20 @@ export function ProductRow({ product, onEdit, onDeactivate }: {
                 Batal
               </AlertDialogCancel>
               <AlertDialogAction
-                className="rounded-2xl bg-red-500 text-white font-black text-[11px] uppercase h-12 px-6 shadow-xl shadow-red-200 hover:bg-red-600"
+                className="rounded-2xl bg-red-500 text-white font-black text-[11px] uppercase h-12 px-6 shadow-xl shadow-red-200 hover:bg-red-600 border-none"
                 onClick={async () => {
-                  const updated = await deactivateProduct(product.id);
-                  onDeactivate?.({
-                    ...product,
-                    isActive: updated.isActive,
-                  });
-                  toast.success("Produk berhasil dinonaktifkan");
+                  try {
+                    const result = await deactivateProduct(product.id);
+                    // Sesuaikan hasil balik ke ProductUI
+                    const updatedProduct: ProductUI = {
+                      ...product,
+                      isActive: result.isActive
+                    };
+                    onDeactivate?.(updatedProduct);
+                    toast.success("Produk berhasil dinonaktifkan");
+                  } catch {
+                    toast.error("Gagal menonaktifkan produk");
+                  }
                 }}
               >
                 Nonaktifkan
