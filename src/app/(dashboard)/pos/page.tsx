@@ -31,32 +31,18 @@ export default async function POSPage() {
   }));
 
   return (
-    /* FIX UTAMA: 
-       - Gunakan 'h-[calc(100vh-140px)]' pada pembungkus paling luar.
-       - Tambahkan 'overflow-hidden' agar tidak ada scrollbar browser yang muncul.
-       - 'flex flex-col' memastikan anak-anaknya patuh pada batas tinggi ini.
-    */
+
     <div className="h-[calc(100vh-140px)] w-full overflow-hidden animate-in fade-in duration-700 bg-slate-50/30">
       <PosInitializer />
 
-      {/* CONTAINER DALAM:
-          - Padding dipindahkan ke sini agar tidak menambah tinggi total elemen luar.
-          - 'h-full' dan 'max-h-full' adalah wajib.
-      */}
       <div className="h-full w-full p-2 sm:p-4 flex flex-col">
 
         <div className="grid grid-cols-1 md:grid-cols-12 gap-4 sm:gap-6 h-full min-h-0">
 
-          {/* PRODUCT PANEL Area:
-              - 'min-h-0' sangat penting di sini agar scrollbar internal ProductPanel aktif.
-          */}
           <div className="md:col-span-7 lg:col-span-8 h-full min-h-0 flex flex-col">
             <ProductPanel products={uiProducts} />
           </div>
 
-          {/* CART PANEL Area:
-              - 'flex flex-col' dan 'min-h-0' memastikan CartPanel tidak "meledak" tingginya.
-          */}
           <div className="hidden md:flex md:col-span-5 lg:col-span-4 h-full min-h-0 flex-col">
             <CartPanel />
           </div>

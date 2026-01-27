@@ -1,9 +1,30 @@
 import { create } from "zustand";
-import type { CartItem, CartState, OrderType } from "./cart.types";
-import { HoldOrder } from "./holdOrder.types";
+import { type OrderType } from "./cart.types";
+import { type HoldOrder } from "./holdOrder.types";
+
+/**
+ * Representasi item di dalam keranjang belanja (UI).
+ * Dibuat flat agar mudah dikelola oleh State Management.
+ */
+export type CartItem = {
+  productId: string;
+  name: string;
+  price: number;
+  qty: number;
+  categoryType: "FOOD" | "DRINK";
+  notes: string;
+};
+
+type CartState = {
+  items: CartItem[];
+  customerName: string;
+  orderType: OrderType;
+  activeOrderId: string;
+  lastAddedProductId: string | null;
+};
 
 type CartActions = {
-  addItem: (item: Omit<CartItem, "qty">) => void;
+  addItem: (item: Omit<CartItem, "qty" | "notes">) => void;
   increaseQty: (productId: string) => void;
   decreaseQty: (productId: string) => void;
   removeItem: (productId: string) => void;
@@ -16,22 +37,14 @@ type CartActions = {
   loadHoldToCart: (hold: HoldOrder) => void;
 };
 
-// Pastikan CartState di cart.types sudah punya activeOrderId,
-// Jika belum, kita tambahkan secara lokal di sini untuk CartStore
-type CartStore = CartState &
-  CartActions & {
-    activeOrderId: string | null; // ✅ Tambahkan status ID aktif
-    lastAddedProductId: string | null;
-  };
-
-export const useCartStore = create<CartStore>()((set, get) => ({
+export const useCartStore = create<CartState & CartActions>()((set, get) => ({
   /* =====================
    * STATE
    ===================== */
   items: [],
   customerName: "",
   orderType: "Dine In",
-  activeOrderId: "", // ✅ Inisialisasi null
+  activeOrderId: "",
   lastAddedProductId: null,
 
   /* =====================
@@ -39,14 +52,14 @@ export const useCartStore = create<CartStore>()((set, get) => ({
    ===================== */
   loadHoldToCart: (hold) => {
     set({
-      activeOrderId: hold.id, // ✅ KUNCI: Simpan ID order dari HOLD agar tidak duplikat saat di-sync ulang
+      activeOrderId: hold.id,
       items: hold.items.map((item) => ({
         productId: item.productId,
         name: item.name,
         price: item.price,
         qty: item.qty,
         categoryType: item.categoryType as "FOOD" | "DRINK",
-        notes: (item as { notes?: string }).notes || "",
+        notes: item.notes || "",
       })),
       customerName: hold.customerName,
       orderType: hold.orderType as OrderType,
@@ -56,55 +69,59 @@ export const useCartStore = create<CartStore>()((set, get) => ({
 
   addItem: (item) =>
     set((state) => {
-      const existing = state.items.find(
-        (i: CartItem) => i.productId === item.productId,
-      );
+      const existing = state.items.find((i) => i.productId === item.productId);
 
-      const items = existing
-        ? state.items.map((i: CartItem) =>
-            i.productId === item.productId ? { ...i, qty: i.qty + 1 } : i,
-          )
-        : [...state.items, { ...item, qty: 1, notes: "" }];
+      if (existing) {
+        return {
+          items: state.items.map((i) =>
+            i.productId === item.productId ? { ...i, qty: i.qty + 1 } : i
+          ),
+          lastAddedProductId: item.productId,
+        };
+      }
 
       return {
-        items,
+        items: [...state.items, { ...item, qty: 1, notes: "" }],
         lastAddedProductId: item.productId,
       };
     }),
 
-  increaseQty: (productId: string) =>
-    set({
-      items: get().items.map((i: CartItem) =>
-        i.productId === productId ? { ...i, qty: i.qty + 1 } : i,
+  increaseQty: (productId) =>
+    set((state) => ({
+      items: state.items.map((i) =>
+        i.productId === productId ? { ...i, qty: i.qty + 1 } : i
       ),
-    }),
+    })),
 
-  decreaseQty: (productId: string) =>
-    set({
-      items: get()
-        .items.map((i: CartItem) =>
-          i.productId === productId ? { ...i, qty: i.qty - 1 } : i,
-        )
-        .filter((i: CartItem) => i.qty > 0),
-    }),
+  decreaseQty: (productId) =>
+    set((state) => ({
+      items: state.items
+        .map((i) => (i.productId === productId ? { ...i, qty: i.qty - 1 } : i))
+        .filter((i) => i.qty > 0),
+    })),
 
-  removeItem: (productId: string) =>
-    set({
-      items: get().items.filter((i: CartItem) => i.productId !== productId),
-    }),
+  removeItem: (productId) =>
+    set((state) => ({
+      items: state.items.filter((i) => i.productId !== productId),
+    })),
 
-  updateNotes: (productId: string, notes: string) =>
-    set({
-      items: get().items.map((i: CartItem) =>
-        i.productId === productId ? { ...i, notes } : i,
+  updateNotes: (productId, notes) =>
+    set((state) => ({
+      items: state.items.map((i) =>
+        i.productId === productId ? { ...i, notes } : i
       ),
-    }),
+    })),
 
+  /**
+   * ✅ UPDATE: Menambahkan pembersihan customerName dan activeOrderId.
+   * Ini memastikan setelah checkout sukses, UI kembali ke kondisi bersih total.
+   */
   clearCart: () =>
     set({
       items: [],
+      customerName: "",
+      activeOrderId: "",
       lastAddedProductId: null,
-      // Note: clearCart biasanya tidak reset customerName/activeOrderId jika hanya ingin hapus item
     }),
 
   resetOrder: () =>
@@ -112,17 +129,12 @@ export const useCartStore = create<CartStore>()((set, get) => ({
       items: [],
       customerName: "",
       orderType: "Dine In",
-      activeOrderId: "", // ✅ Reset ID saat pesanan benar-benar selesai/dibersihkan
+      activeOrderId: "",
       lastAddedProductId: null,
     }),
 
-  setCustomerName: (name: string) => set({ customerName: name }),
-
-  setOrderType: (type: OrderType) => set({ orderType: type }),
-
+  setCustomerName: (name) => set({ customerName: name }),
+  setOrderType: (type) => set({ orderType: type }),
   getSubtotal: () =>
-    get().items.reduce(
-      (total: number, item: CartItem) => total + item.price * item.qty,
-      0,
-    ),
+    get().items.reduce((total, item) => total + item.price * item.qty, 0),
 }));

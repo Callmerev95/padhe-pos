@@ -1,14 +1,18 @@
 "use client";
 
-import { OrderRecord } from "@/features/order-history/useOrderHistory";
+import { z } from "zod";
+import { LocalOrderSchema } from "@/lib/db";
 import { OrderRow } from "./OrderRow";
 import { OrderEmptyState } from "./OrderEmptyState";
 import { Spinner } from "@/components/ui/spinner";
 
-type Props = {
+// Inferensi tipe langsung dari Zod Schema agar single source of truth [cite: 2026-01-10]
+type OrderRecord = z.infer<typeof LocalOrderSchema> & { isSynced?: boolean };
+
+interface Props {
   orders: OrderRecord[];
   loading?: boolean;
-};
+}
 
 export function OrderTable({ orders, loading }: Props) {
   if (loading) {
@@ -32,8 +36,7 @@ export function OrderTable({ orders, loading }: Props) {
         <thead>
           <tr className="relative z-30">
             <th className="sticky top-0 z-30 bg-[#f8fafc] w-1 p-0 border-b border-slate-200 first:rounded-tl-3xl" />
-
-            <th className="sticky top-0 z-30 bg-[#f8fafc] px-6 py-4 text-left font-black text-slate-500 uppercase tracking-wider text-[10px] first:rounded-tl-3xl border-b border-slate-200">
+            <th className="sticky top-0 z-30 bg-[#f8fafc] px-6 py-4 text-left font-black text-slate-500 uppercase tracking-wider text-[10px] border-b border-slate-200">
               Waktu
             </th>
             <th className="sticky top-0 z-30 bg-[#f8fafc] px-6 py-4 text-left font-black text-slate-500 uppercase tracking-wider text-[10px] border-b border-slate-200">
@@ -51,9 +54,15 @@ export function OrderTable({ orders, loading }: Props) {
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-50">
-          {orders.map((o) => (
-            <OrderRow key={o.id} order={o} />
-          ))}
+          {orders.map((o) => {
+            // Validasi tiap row dengan Zod secara aman [cite: 2026-01-10]
+            const result = LocalOrderSchema.safeParse(o);
+            if (!result.success) {
+              console.error("Invalid Order Data:", result.error);
+              return null;
+            }
+            return <OrderRow key={o.id} order={o} />;
+          })}
         </tbody>
       </table>
     </div>

@@ -10,6 +10,8 @@ import { syncOrderToCloud } from "@/app/(dashboard)/order/actions";
 import { toast } from "sonner";
 import { generateOrderId } from "@/lib/generateOrderId";
 import { CreditCard, Loader2, PauseCircle } from "lucide-react";
+import { type LocalOrder, type OrderItem } from "@/lib/db";
+import { type OrderType } from "@/store/cart.types";
 
 export function CartActions() {
   const items = useCartStore((s) => s.items);
@@ -34,43 +36,55 @@ export function CartActions() {
     const orderId = activeOrderId !== "" ? activeOrderId : generateOrderId("POS-");
     const now = new Date().toISOString();
 
-    const orderData = {
+    const orderData: LocalOrder = {
       id: orderId,
       createdAt: now,
       total: subtotal,
       paid: 0,
-      paymentMethod: "CASH" as const,
+      paymentMethod: "CASH",
       customerName: customerName || "Guest",
       orderType: orderType as "Dine In" | "Take Away",
-      items: items.map((i) => {
-        const itemWithStatus = i as unknown as { isDone?: boolean };
-        return {
-          id: i.productId,
-          name: i.name,
-          qty: i.qty,
-          price: i.price,
-          categoryType: i.categoryType as "FOOD" | "DRINK",
-          notes: i.notes || "",
-          isDone: itemWithStatus.isDone === true,
-        };
-      }),
-      isSynced: true,
+      status: "PENDING",
+      items: items.map((i): OrderItem => ({
+        id: i.productId,
+        name: i.name,
+        qty: i.qty,
+        price: i.price,
+        categoryType: i.categoryType,
+        notes: i.notes || "",
+        isDone: false,
+      })),
+      isSynced: false,
     };
 
     try {
       const res = await syncOrderToCloud(orderData);
+
       if (res.success) {
+        // ✅ DISESUAIKAN DENGAN HoldOrder interface
         addHold({
-          ...orderData,
-          items: orderData.items.map(i => ({ ...i, productId: i.id }))
+          id: orderData.id,
+          createdAt: orderData.createdAt,
+          // Mengubah null menjadi undefined agar cocok dengan customerName?
+          customerName: orderData.customerName ?? undefined,
+          orderType: orderData.orderType as OrderType,
+          items: orderData.items.map(i => ({
+            productId: i.id,
+            name: i.name,
+            qty: i.qty,
+            price: i.price,
+            categoryType: i.categoryType,
+            notes: i.notes ?? ""
+          }))
         });
+
         toast.success(activeOrderId !== "" ? "Pesanan diperbarui" : "Pesanan berhasil di-hold");
         resetOrder();
       } else {
         toast.error(`Gagal sinkron: ${res.error}`);
       }
     } catch (err) {
-      console.error(err);
+      console.error("HOLD_ERROR:", err);
       toast.error("Terjadi kesalahan sistem");
     } finally {
       setIsHolding(false);
@@ -80,7 +94,6 @@ export function CartActions() {
   return (
     <>
       <div className="flex gap-3 mt-1 px-1">
-        {/* Tombol HOLD: Dibuat lebih ramping dan taktil */}
         <Button
           variant="outline"
           disabled={isDisabled || isHolding}
@@ -97,7 +110,6 @@ export function CartActions() {
           )}
         </Button>
 
-        {/* Tombol PROSES BAYAR: The Hero Button */}
         <Button
           data-open-payment
           disabled={isDisabled || isHolding}

@@ -1,5 +1,5 @@
-import { HoldOrder } from "@/store/holdOrder.types";
-import { z } from "zod"; // Gunakan import standard
+import { z } from "zod";
+import { type HoldOrder } from "@/store/holdOrder.types";
 
 // ✅ 1. Definisi Zod Schema (Single Source of Truth)
 export const OrderItemSchema = z.object({
@@ -9,7 +9,7 @@ export const OrderItemSchema = z.object({
   price: z.number(),
   categoryType: z.enum(["FOOD", "DRINK"]),
   notes: z.string().optional().nullable(),
-  isDone: z.boolean().default(false), // Tambahkan field ini
+  isDone: z.boolean().default(false),
 });
 
 export const LocalOrderSchema = z.object({
@@ -22,10 +22,14 @@ export const LocalOrderSchema = z.object({
   orderType: z.enum(["Dine In", "Take Away"]),
   items: z.array(OrderItemSchema),
   isSynced: z.boolean().optional().default(false),
+  // ✅ FIX: Default status diubah ke PENDING agar muncul di KDS
+  status: z
+    .enum(["PENDING", "PREPARING", "READY", "COMPLETED", "CANCELLED"])
+    .optional()
+    .default("PENDING"),
 });
 
-// ✅ 2. Export Type (Otomatis dari Schema)
-// Kita gunakan 'infer' agar tidak perlu nulis type manual lagi
+// ✅ 2. Export Type
 export type OrderItem = z.infer<typeof OrderItemSchema>;
 export type LocalOrder = z.infer<typeof LocalOrderSchema>;
 
@@ -35,7 +39,7 @@ const DB_VERSION = 2;
 const STORE_ORDERS = "orders";
 const STORE_HOLD_ORDERS = "hold_orders";
 
-// Fungsi untuk membuka koneksi ke IndexedDB
+// Fungsi internal untuk membuka koneksi
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
@@ -55,34 +59,85 @@ function openDB(): Promise<IDBDatabase> {
   });
 }
 
-// Fungsi untuk menyimpan pesanan lokal
+// ✅ FIX: Fungsi updateOrderSyncStatus
+export async function updateOrderSyncStatus(
+  id: string,
+  isSynced: boolean,
+): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_ORDERS, "readwrite");
+    const store = tx.objectStore(STORE_ORDERS);
+    const getRequest = store.get(id);
+
+    getRequest.onsuccess = () => {
+      const data = getRequest.result;
+      if (data) {
+        data.isSynced = isSynced;
+        store.put(data);
+      }
+    };
+
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+// ✅ NEW: Fungsi updateOrderStatus (Untuk KDS mengupdate status utama)
+export async function updateOrderStatusLocal(
+  id: string,
+  status: LocalOrder["status"]
+): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_ORDERS, "readwrite");
+    const store = tx.objectStore(STORE_ORDERS);
+    const req = store.get(id);
+    req.onsuccess = () => {
+      const data = req.result;
+      if (data) {
+        data.status = status;
+        store.put(data);
+      }
+    };
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+// ✅ NEW: Fungsi updateItemStatusLocal (Untuk centang item di KDS)
+export async function updateItemStatusLocal(
+  orderId: string,
+  itemIdx: number,
+  isDone: boolean
+): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_ORDERS, "readwrite");
+    const store = tx.objectStore(STORE_ORDERS);
+    const req = store.get(orderId);
+    req.onsuccess = () => {
+      const data = req.result as LocalOrder;
+      if (data && data.items[itemIdx]) {
+        data.items[itemIdx].isDone = isDone;
+        store.put(data);
+      }
+    };
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
 export async function saveOrder(order: LocalOrder) {
   const db = await openDB();
   const tx = db.transaction(STORE_ORDERS, "readwrite");
-
-  // ✅ Gunakan parse agar data yang masuk ke IndexedDB terjamin kualitasnya
   const validatedOrder = LocalOrderSchema.parse(order);
   tx.objectStore(STORE_ORDERS).put(validatedOrder);
-}
-
-// Fungsi update status sync
-export async function markOrderAsSynced(id: string) {
-  const db = await openDB();
-  const tx = db.transaction(STORE_ORDERS, "readwrite");
-  const store = tx.objectStore(STORE_ORDERS);
-  const order = await new Promise<LocalOrder | undefined>((res) => {
-    const req = store.get(id);
-    req.onsuccess = () => res(req.result);
+  return new Promise((res) => {
+    tx.oncomplete = () => res(true);
   });
-
-  if (order) {
-    order.isSynced = true;
-    store.put(order);
-  }
-  return tx.oncomplete;
 }
 
-// Fungsi untuk mengambil semua pesanan
 export async function getAllOrders(): Promise<LocalOrder[]> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
@@ -94,8 +149,9 @@ export async function getAllOrders(): Promise<LocalOrder[]> {
   });
 }
 
-// Fungsi untuk mengambil pesanan berdasarkan ID
-export async function getOrderById(id: string): Promise<LocalOrder> {
+export async function getOrderById(
+  id: string,
+): Promise<LocalOrder | undefined> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_ORDERS, "readonly");
@@ -106,45 +162,47 @@ export async function getOrderById(id: string): Promise<LocalOrder> {
   });
 }
 
-// Fungsi untuk menghapus pesanan berdasarkan ID
 export async function deleteOrder(id: string) {
   const db = await openDB();
   const tx = db.transaction(STORE_ORDERS, "readwrite");
-  const store = tx.objectStore(STORE_ORDERS);
-  store.delete(id);
-  return tx.oncomplete;
+  tx.objectStore(STORE_ORDERS).delete(id);
+  return new Promise((res) => {
+    tx.oncomplete = () => res(true);
+  });
 }
 
-// Fungsi untuk menyimpan hold order
+// --- HOLD ORDERS SECTION ---
+
 export async function saveHoldOrderLocal(order: HoldOrder) {
   const db = await openDB();
   const tx = db.transaction(STORE_HOLD_ORDERS, "readwrite");
   tx.objectStore(STORE_HOLD_ORDERS).put(order);
-  return tx.oncomplete;
+  return new Promise((res) => {
+    tx.oncomplete = () => res(true);
+  });
 }
 
-// Fungsi untuk mengambil semua hold order
 export async function getAllHoldOrdersLocal(): Promise<HoldOrder[]> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_HOLD_ORDERS, "readonly");
     const store = tx.objectStore(STORE_HOLD_ORDERS);
-    const req = store.getAll();
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+    const request = store.getAll();
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
   });
 }
 
-// Fungsi untuk menghapus hold order berdasarkan ID
 export async function deleteHoldOrderLocal(id: string) {
   const db = await openDB();
   const tx = db.transaction(STORE_HOLD_ORDERS, "readwrite");
   tx.objectStore(STORE_HOLD_ORDERS).delete(id);
-  return tx.oncomplete;
+  return new Promise((res) => {
+    tx.oncomplete = () => res(true);
+  });
 }
 
-// Fungsi untuk menyimpan atau memperbarui pesanan dari cloud
-// src/lib/db.ts
+// --- CLOUD SYNC SECTION ---
 
 export async function upsertOrdersFromCloud(cloudOrders: unknown[]) {
   const db = await openDB();
@@ -155,43 +213,38 @@ export async function upsertOrdersFromCloud(cloudOrders: unknown[]) {
     const orderData = order as Record<string, unknown>;
     const rawItems = (orderData.items as unknown[]) || [];
 
-    // 1. Normalisasi Items - Kunci perbaikan ada di sini
     const normalizedItems = rawItems.map((item, index) => {
       const i = item as Record<string, unknown>;
       return {
-        // ✅ Berikan ID dummy jika ID asli tidak ada agar lolos validasi Zod
-        id: String(i.id || `item-legacy-${index}`), 
+        id: String(i.id || i.productId || `item-legacy-${index}`),
         name: String(i.name || "Unknown Item"),
         qty: Number(i.qty || 1),
         price: Number(i.price || 0),
-        categoryType: String(i.categoryType || "FOOD").toUpperCase(),
+        categoryType: String(i.categoryType || "FOOD").toUpperCase() as
+          | "FOOD"
+          | "DRINK",
         isDone: Boolean(i.isDone ?? false),
         notes: i.notes ? String(i.notes) : "",
       };
     });
 
-    // 2. Susun objek Order
     const orderToValidate = {
       ...orderData,
       items: normalizedItems,
       isSynced: true,
-      // Pastikan metode pembayaran dan tipe order punya default jika kosong
+      status: orderData.status || "PENDING",
       paymentMethod: String(orderData.paymentMethod || "CASH").toUpperCase(),
       orderType: orderData.orderType || "Dine In",
-      createdAt: orderData.createdAt instanceof Date 
-        ? orderData.createdAt.toISOString() 
-        : String(orderData.createdAt),
+      createdAt:
+        orderData.createdAt instanceof Date
+          ? orderData.createdAt.toISOString()
+          : String(orderData.createdAt),
     };
 
     try {
-      // 3. Validasi dengan safeParse
       const result = LocalOrderSchema.safeParse(orderToValidate);
-      
       if (result.success) {
         store.put(result.data);
-      } else {
-        // Jika masih gagal, kita log detail field mana yang bikin mati
-        console.error(`❌ Gagal parse Order ${orderData.id}:`, result.error.flatten().fieldErrors);
       }
     } catch (err) {
       console.error(`Gagal simpan ke IndexedDB:`, err);

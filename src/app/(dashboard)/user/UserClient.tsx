@@ -5,7 +5,7 @@ import { Users, Search, ShieldCheck, UserCog } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import { PremiumHeader } from "@/components/shared/header/PremiumHeader";
-import { OrderFooter } from "@/components/shared/order/OrderFooter";
+import { OrderFooter } from "@/app/(dashboard)/order/components/OrderFooter";
 import { CreateUserDialog } from "./CreateUserDialog";
 import { UserActions } from "./UserActions";
 import { Role, User } from "@prisma/client";

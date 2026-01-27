@@ -1,23 +1,13 @@
 "use client";
 
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
+import { useState, useEffect } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, Printer, FileText, ChevronRight, Loader2 } from "lucide-react";
+import { CheckCircle2, Home, Printer, Loader2 } from "lucide-react";
 import { useReceiptStore } from "@/store/useReceiptStore";
-import { useCartStore } from "@/store/useCartStore";
-import { format } from "date-fns";
-import { id } from "date-fns/locale";
-import { ReceiptView } from "@/components/shared/pos/receipt/ReceiptView";
-import { useState } from "react";
-import { toast } from "sonner";
-import { printReceiptBluetooth } from "@/lib/printer-utils";
 import { getPrinterSettings } from "@/app/(dashboard)/user/printerActions";
+import { PrinterSettings, BluetoothNavigator } from "@/app/(dashboard)/settings/printer/types/printer.types";
+import { toast } from "sonner";
 
 type Props = {
   open: boolean;
@@ -25,166 +15,130 @@ type Props = {
 };
 
 export function PaymentSuccessModal({ open, onClose }: Props) {
-  const receipt = useReceiptStore((s) => s.receipt);
-  const clearReceipt = useReceiptStore((s) => s.clearReceipt);
-  const resetOrder = useCartStore((s) => s.resetOrder);
-
+  const { receipt } = useReceiptStore();
   const [isPrinting, setIsPrinting] = useState(false);
+  const [printerConfig, setPrinterConfig] = useState<PrinterSettings | null>(null);
 
-  if (!receipt) return null;
-
-  function onFinish() {
-    resetOrder();
-    clearReceipt();
-    onClose();
-  }
-
-  async function onPrint() {
-    if (!receipt) {
-      toast.error("Data transaksi tidak ditemukan");
-      return;
+  useEffect(() => {
+    if (open) {
+      getPrinterSettings().then((res) => {
+        if (res.success) setPrinterConfig(res.data as unknown as PrinterSettings);
+      });
     }
+  }, [open]);
+
+  const handleBluetoothPrint = async () => {
+    // ✅ Tambahkan pengecekan menyeluruh agar TypeScript tidak komplain
+    if (!receipt || !printerConfig) {
+      toast.error("Data transaksi atau setting printer belum siap.");
+      return;
+    };
 
     setIsPrinting(true);
     try {
-      const res = await getPrinterSettings();
-
-      if (res.success && res.data) {
-        const s = res.data;
-        const currentReceipt = receipt;
-
-        await printReceiptBluetooth({
-          header: s.header || "PADHE COFFEE",
-          address: s.address || "",
-          items: currentReceipt.items.map((i: { name: string; qty: number; price: number }) => ({
-            name: i.name,
-            qty: i.qty,
-            price: i.price,
-          })),
-          total: currentReceipt.total,
-          footer: s.footer || "Terima Kasih!",
-          kasir: currentReceipt.cashierName || "Revangga",
-          customerName: currentReceipt.customerName,
-          orderType: currentReceipt.orderType,
-          subtotal: currentReceipt.subtotal,
-          tax: currentReceipt.tax,
-          charge: currentReceipt.charge,
-          paid: currentReceipt.paid,
-          change: currentReceipt.change,
-        });
-
-        toast.success("Struk sedang dicetak...");
-      } else {
-        toast.error("Atur printer di menu Settings terlebih dahulu");
+      const nav = navigator as unknown as BluetoothNavigator;
+      if (!nav.bluetooth) {
+        toast.error("Web Bluetooth tidak didukung di browser ini.");
+        return;
       }
-    } catch (err) {
-      const error = err as Error;
-      toast.error(`Gagal Cetak: ${error.message || "Masalah koneksi"}`);
+
+      const device = await nav.bluetooth.requestDevice({
+        acceptAllDevices: true,
+        optionalServices: ['000018f0-0000-1000-8000-00805f9b34fb']
+      });
+
+      const server = await device?.gatt?.connect();
+      const service = await server?.getPrimaryService('000018f0-0000-1000-8000-00805f9b34fb');
+      const characteristic = await service?.getCharacteristic('00002af1-0000-1000-8000-00805f9b34fb');
+
+      const encoder = new TextEncoder();
+
+      const line = "--------------------------------\n";
+      const receiptBody = receipt.items.map(item =>
+        `${item.name.toUpperCase()}\n${item.qty} x ${item.price.toLocaleString()} = ${(item.qty * item.price).toLocaleString()}`
+      ).join('\n');
+
+      // ✅ Gunakan fallback (0) jika change bernilai undefined
+      const textToPrint =
+        `${printerConfig.header}\n` +
+        `${printerConfig.address}\n` +
+        line +
+        `Order: ${receipt.orderId}\n` +
+        `Kasir: ${receipt.cashierName}\n` +
+        line +
+        `${receiptBody}\n` +
+        line +
+        `TOTAL: Rp ${receipt.total.toLocaleString()}\n` +
+        `BAYAR: Rp ${receipt.paid.toLocaleString()}\n` +
+        `KEMBALI: Rp ${(receipt.change ?? 0).toLocaleString()}\n` +
+        line +
+        `${printerConfig.footer}\n\n\n\n`;
+
+      const data = encoder.encode(textToPrint);
+      await characteristic?.writeValue(data);
+      toast.success("Struk berhasil dicetak!");
+
+    } catch (error) {
+      console.error(error);
+      toast.error("Koneksi dibatalkan atau printer tidak ditemukan.");
     } finally {
       setIsPrinting(false);
     }
-  }
-
-  function onDownloadPdf() {
-    toast.info("Fitur PDF akan segera hadir");
-  }
+  };
 
   return (
-    <Dialog open={open} onOpenChange={onFinish}>
-      <DialogContent className="max-w-sm p-0 overflow-hidden border-none rounded-[2.5rem] bg-white">
-        <DialogHeader>
-          <VisuallyHidden>
-            <DialogTitle>Pembayaran Berhasil</DialogTitle>
-          </VisuallyHidden>
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-md p-0 overflow-hidden border-none rounded-[2.5rem] bg-slate-50">
+        <DialogHeader className="sr-only">
+          <DialogTitle>Pembayaran Berhasil</DialogTitle>
+          <DialogDescription>Detail transaksi dan cetak struk bluetooth.</DialogDescription>
         </DialogHeader>
 
-        {/* Top Celebration Section */}
-        <div className="bg-emerald-500 p-8 text-white flex flex-col items-center justify-center relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl" />
-          
-          <div className="bg-white/20 p-3 rounded-full mb-4 animate-in zoom-in duration-500">
-            <CheckCircle2 className="h-12 w-12 text-white" strokeWidth={3} />
-          </div>
-          
-          <div className="text-center space-y-1 relative z-10">
-            <h2 className="text-2xl font-black uppercase tracking-tight">Sukses!</h2>
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-80">
-              Transaksi Berhasil Diproses
-            </p>
-          </div>
-        </div>
-
-        <div className="p-6 space-y-6">
-          {/* Amount Box */}
-          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 flex flex-col items-center justify-center">
-            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
-              Total Pembayaran
-            </span>
-            <span className="text-3xl font-black text-slate-900 tabular-nums">
-              Rp {receipt.total.toLocaleString("id-ID")}
-            </span>
-          </div>
-
-          {/* Details List */}
-          <div className="space-y-3 px-1">
-            <div className="flex justify-between items-center text-[11px]">
-              <span className="font-bold text-slate-400 uppercase tracking-widest">Order ID</span>
-              <span className="font-black text-slate-900">#{receipt.orderId}</span>
-            </div>
-            <div className="flex justify-between items-center text-[11px]">
-              <span className="font-bold text-slate-400 uppercase tracking-widest">Metode</span>
-              <span className="font-black text-cyan-600 bg-cyan-50 px-2 py-0.5 rounded-md uppercase">
-                {receipt.paymentMethod}
-              </span>
-            </div>
-            <div className="flex justify-between items-center text-[11px]">
-              <span className="font-bold text-slate-400 uppercase tracking-widest">Waktu</span>
-              <span className="font-bold text-slate-600">
-                {format(new Date(receipt.createdAt), "HH:mm, dd MMM yyyy", { locale: id })}
-              </span>
+        <div className="p-8 text-center space-y-6">
+          <div className="flex justify-center">
+            <div className="relative">
+              <div className="absolute inset-0 bg-emerald-200 rounded-full animate-ping opacity-25" />
+              <div className="relative bg-emerald-500 text-white p-6 rounded-full shadow-lg shadow-emerald-200">
+                <CheckCircle2 size={56} strokeWidth={2.5} />
+              </div>
             </div>
           </div>
 
-          <div className="space-y-3 pt-2">
-            {/* Main Action: PRINT */}
+          <div className="space-y-1">
+            <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tight italic">
+              SUCCESS!
+            </h2>
+            {/* ✅ Pengecekan aman untuk rendering UI */}
+            {receipt && (
+              <div className="bg-emerald-50 py-2 px-4 rounded-xl inline-block border border-emerald-100">
+                <p className="text-emerald-700 font-black text-xl">
+                  KEMBALI: Rp {(receipt.change ?? 0).toLocaleString("id-ID")}
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 pt-4">
             <Button
-              onClick={onPrint}
+              onClick={handleBluetoothPrint}
               disabled={isPrinting}
-              className="w-full h-14 rounded-2xl bg-slate-900 hover:bg-black text-white shadow-xl shadow-slate-200 transition-all active:scale-[0.98] flex items-center justify-center gap-3 group"
+              className="h-16 rounded-2xl bg-cyan-600 hover:bg-cyan-700 text-white shadow-xl shadow-cyan-100 flex items-center justify-center gap-3 transition-all active:scale-95 disabled:opacity-50"
             >
-              {isPrinting ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : (
-                <Printer className="h-5 w-5 group-hover:rotate-12 transition-transform" />
-              )}
-              <span className="font-black uppercase tracking-widest text-xs">Cetak Struk Thermal</span>
+              {isPrinting ? <Loader2 className="w-6 h-6 animate-spin" /> : <Printer size={22} />}
+              <span className="font-black uppercase tracking-widest text-sm">Cetak Struk Bluetooth</span>
             </Button>
 
-            <div className="grid grid-cols-2 gap-3">
-              <Button
-                variant="outline"
-                onClick={onDownloadPdf}
-                className="h-12 rounded-xl border-slate-200 font-bold text-xs text-slate-600 hover:bg-slate-50"
-              >
-                <FileText className="mr-2 h-4 w-4 text-slate-400" />
-                SIMPAN PDF
-              </Button>
-
-              <Button
-                onClick={onFinish}
-                className="h-12 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-black text-xs uppercase tracking-widest group"
-              >
-                SELESAI
-                <ChevronRight className="ml-1 h-4 w-4 group-hover:translate-x-1 transition-transform" />
-              </Button>
-            </div>
+            <Button
+              onClick={onClose}
+              variant="ghost"
+              className="h-14 rounded-2xl text-slate-400 hover:text-slate-900 font-bold uppercase tracking-widest text-xs flex items-center justify-center gap-2"
+            >
+              <Home size={18} />
+              Selesai & Pesanan Baru
+            </Button>
           </div>
         </div>
       </DialogContent>
-
-      <div className="print-receipt hidden print:block">
-        <ReceiptView receipt={receipt} />
-      </div>
     </Dialog>
   );
 }

@@ -4,8 +4,8 @@
 import { ProductList } from "./components/ProductList";
 import { ProductHeader } from "./components/ProductHeader";
 import { CreateProductDialog } from "./components/CreateProductDialog";
-import { OrderFooter } from "@/components/shared/order/OrderFooter";
-import { CreditNote } from "@/components/shared/order/CreditNote";
+import { OrderFooter } from "@/app/(dashboard)/order/components/OrderFooter";
+import { CreditNote } from "@/app/(dashboard)/order/components/CreditNote";
 
 // 2. UPDATE: Hapus import Product lama, hanya pakai ProductUI
 import { ProductUI } from "./types/product.types";

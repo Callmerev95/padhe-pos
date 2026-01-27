@@ -5,8 +5,8 @@ import { Boxes, History, List, PackageSearch, AlertTriangle, Search } from "luci
 import { CreateIngredientDialog } from "./components/CreateIngredientDialog";
 import { IngredientActionButtons } from "./components/IngredientActionButtons";
 import { PremiumHeader } from "@/components/shared/header/PremiumHeader";
-import { OrderFooter } from "@/components/shared/order/OrderFooter";
-import { CreditNote } from "@/components/shared/order/CreditNote";
+import { OrderFooter } from "@/app/(dashboard)/order/components/OrderFooter";
+import { CreditNote } from "@/app/(dashboard)/order/components/CreditNote";
 import Link from "next/link";
 import CountUp from "react-countup";
 import { motion, AnimatePresence } from "framer-motion";

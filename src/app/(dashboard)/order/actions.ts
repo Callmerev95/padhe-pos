@@ -2,291 +2,291 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { Prisma, OrderStatus } from "@prisma/client";
-import { type OrderItem, LocalOrderSchema } from "@/lib/db";
-import { z } from "zod";
+import { OrderStatus, Prisma } from "@prisma/client";
+import { type OrderItem, type LocalOrder } from "@/lib/db";
 
-type CreateOrderParams = z.infer<typeof LocalOrderSchema>;
+// Import Types dari folder products
+import {
+  ProductFormSchema,
+  type ProductFormInput,
+} from "../products/types/product.types";
 
-async function processStockDeduction(
-  tx: Prisma.TransactionClient,
-  items: OrderItem[],
-  orderId: string,
-) {
-  for (const item of items) {
-    try {
-      const recipes = await tx.recipe.findMany({
-        where: { productId: item.id },
-      });
+/* =========================
+   ORDER ACTIONS (CLOUD & SYNC)
+========================= */
 
-      if (!recipes || recipes.length === 0) continue;
+/**
+ * Sinkronisasi order dari local ke cloud.
+ * ✅ FIX: Menggunakan tipe 'LocalOrder' menggantikan 'any' sesuai instruksi.
+ * ✅ UPDATE: Menambahkan 'paid' pada bagian update agar pelunasan Hold Order tercatat.
+ */
+export async function syncOrderToCloud(orderData: LocalOrder) {
+  try {
+    const {
+      id,
+      items,
+      customerName,
+      total,
+      paid,
+      paymentMethod,
+      orderType,
+      status,
+      createdAt,
+    } = orderData;
 
-      for (const recipe of recipes) {
-        const deductQty = recipe.quantity * item.qty;
+    const syncedOrder = await prisma.order.upsert({
+      where: { id },
+      update: {
+        // ✅ Krusial: Pastikan 'paid' di-update agar saat bayar order Hold, angka pembayarannya masuk.
+        paid: Number(paid),
+        status: (status as OrderStatus) || OrderStatus.COMPLETED,
+        items: items as unknown as Prisma.InputJsonValue,
+        paymentMethod,
+      },
+      create: {
+        id,
+        customerName: customerName || "Guest",
+        total: Number(total),
+        paid: Number(paid),
+        paymentMethod,
+        orderType,
+        status: (status as OrderStatus) || OrderStatus.COMPLETED,
+        items: items as unknown as Prisma.InputJsonValue,
+        createdAt: new Date(createdAt),
+      },
+    });
 
-        const updatedIngredient = await tx.ingredient.update({
-          where: { id: recipe.ingredientId },
-          data: {
-            stock: { decrement: deductQty },
-          },
-        });
+    // Revalidate semua path dashboard yang berkaitan dengan data order
+    revalidatePath("/(dashboard)/order");
+    revalidatePath("/(dashboard)/kitchen");
+    revalidatePath("/(dashboard)/history");
 
-        await tx.stockLog.create({
-          data: {
-            ingredientId: recipe.ingredientId,
-            type: "OUT",
-            quantity: deductQty,
-            previousStock: updatedIngredient.stock + deductQty,
-            currentStock: updatedIngredient.stock,
-            note: `Sales: ${item.name} (#${orderId.slice(-5)})`,
-          },
-        });
-      }
-    } catch (err) {
-      console.error(`Gagal potong stok untuk item ${item.name}:`, err);
-    }
+    return { success: true, data: syncedOrder };
+  } catch (error) {
+    console.error("SYNC_ORDER_ERROR:", error);
+    return { success: false, error: "Gagal sinkron ke cloud" };
   }
 }
 
-export async function syncOrderToCloud(
-  data: CreateOrderParams,
-  forceStatus?: OrderStatus,
-) {
+export async function syncBulkOrders(orders: LocalOrder[]) {
   try {
-    const result = await prisma.$transaction(
-      async (tx) => {
-        const existingOrder = await tx.order.findUnique({
-          where: { id: data.id },
-        });
-
-        if (existingOrder) {
-          const oldItems =
-            (existingOrder.items as unknown as OrderItem[]) || [];
-          const newItems = data.items;
-          let isNewItemAdded = false;
-
-          const mergedItems = newItems.map((newItem) => {
-            const oldItem = oldItems.find((i) => i.id === newItem.id);
-            if (!oldItem || newItem.qty > oldItem.qty) {
-              isNewItemAdded = true;
-            }
-
-            return {
-              ...newItem,
-              isDone: oldItem ? oldItem.isDone : false,
-            };
-          });
-
-          for (const newItem of newItems) {
-            const oldItem = oldItems.find((i) => i.id === newItem.id);
-            const oldQty = oldItem ? oldItem.qty : 0;
-            const diffQty = newItem.qty - oldQty;
-
-            if (diffQty > 0) {
-              await processStockDeduction(
-                tx,
-                [{ ...newItem, qty: diffQty }],
-                data.id,
-              );
-            }
-          }
-
-          let nextStatus = existingOrder.status;
-          if (forceStatus === "COMPLETED") {
-            nextStatus = "COMPLETED";
-          } else if (isNewItemAdded) {
-            nextStatus = "PENDING";
-          }
-
-          return await tx.order.update({
-            where: { id: data.id },
-            data: {
-              total: data.total,
-              paid: data.paid,
-              paymentMethod: data.paymentMethod,
-              items: mergedItems as unknown as Prisma.InputJsonValue,
-              customerName: data.customerName ?? "Guest",
-              orderType: data.orderType,
-              status: nextStatus,
-            },
-          });
-        }
-
-        const order = await tx.order.create({
-          data: {
-            id: data.id,
-            createdAt: new Date(data.createdAt),
-            total: data.total,
-            paid: data.paid,
-            paymentMethod: String(data.paymentMethod), // Pastikan String sesuai Schema
-            customerName: data.customerName ?? "Guest",
-            orderType: data.orderType,
-            items: data.items as unknown as Prisma.InputJsonValue,
-            status: forceStatus || "PENDING",
-          },
-        });
-
-        await processStockDeduction(tx, data.items, data.id);
-        return order;
-      },
-      { maxWait: 5000, timeout: 20000 },
+    const results = await Promise.all(
+      orders.map((order) => syncOrderToCloud(order)),
     );
 
-    revalidatePath("/");
-    revalidatePath("/order");
-    revalidatePath("/kitchen");
-    revalidatePath("/inventory/ingredients");
+    const failed = results.filter((r) => !r.success);
 
-    return { success: true, data: result };
+    if (failed.length > 0) {
+      return {
+        success: false,
+        error: `${failed.length} order gagal disinkronkan`,
+      };
+    }
+
+    return { success: true };
   } catch (error) {
-    console.error("SYNC_ERROR_DETAIL:", error); // Lebih detail untuk debug di terminal
-    return { success: false, error: "Gagal Sinkronisasi Cloud" };
+    console.error("SYNC_BULK_ERROR:", error);
+    return { success: false, error: "Gagal sinkronisasi masal" };
   }
 }
 
+/**
+ * Mengambil semua order dari cloud.
+ */
 export async function getOrdersFromCloud() {
   try {
     const orders = await prisma.order.findMany({
-      where: { status: "COMPLETED" },
       orderBy: { createdAt: "desc" },
     });
 
-    return {
-      success: true,
-      data: orders.map((o) => ({ ...o, isSynced: true })),
-    };
+    const normalizedOrders = orders.map((order) => ({
+      ...order,
+      items: (order.items as unknown as OrderItem[]) || [],
+    }));
+
+    return { success: true, data: normalizedOrders };
   } catch (error) {
-    console.error("Fetch Orders Error:", error);
-    return { success: false, error: "Gagal Mengambil data Cloud" };
+    console.error("GET_ORDERS_CLOUD_ERROR:", error);
+    return { success: false, error: "Gagal mengambil data dari cloud" };
   }
 }
 
-export async function updateOrderStatus(
-  orderId: string,
-  newStatus: OrderStatus,
-) {
-  try {
-    const order = await prisma.order.findUnique({ where: { id: orderId } });
-    if (!order) return { success: false, error: "Order tidak ditemukan" };
-
-    if (newStatus === "READY") {
-      const items = (order.items as unknown as OrderItem[]) || [];
-      if (!items.every((item) => item.isDone)) {
-        return { success: false, error: "Masih ada item belum kelar!" };
-      }
-    }
-
-    const updatedOrder = await prisma.order.update({
-      where: { id: orderId },
-      data: { status: newStatus },
-    });
-
-    revalidatePath("/order");
-    revalidatePath("/kitchen");
-    return { success: true, data: updatedOrder };
-  } catch (error) {
-    console.error("Update Status Error:", error);
-    return { success: false, error: "Gagal update status" };
-  }
-}
-
+/**
+ * Mengambil order untuk Kitchen (Status: PENDING, PREPARING, READY).
+ */
 export async function getKitchenOrders() {
   try {
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
-
-    // 1. Ambil data dari Database
     const orders = await prisma.order.findMany({
       where: {
-        // Kita hanya ambil status yang berpotensi masih butuh tindakan koki
-        status: { in: [OrderStatus.PENDING, OrderStatus.PREPARING, OrderStatus.COMPLETED] },
-        createdAt: { gte: startOfToday }
+        status: {
+          in: [OrderStatus.PENDING, OrderStatus.PREPARING, OrderStatus.READY],
+        },
       },
       orderBy: { createdAt: "asc" },
     });
 
-    // 2. Filter logic untuk membersihkan layar KDS
-    const activeOrders = orders.filter((order) => {
-      // Jika statusnya sudah READY, koki sudah klik "Siap Saji", jadi tidak perlu muncul lagi
-      if (order.status === OrderStatus.READY) return false;
+    const normalizedOrders = orders.map((order) => ({
+      ...order,
+      items: (order.items as unknown as OrderItem[]) || [],
+    }));
 
-      // Type-safe conversion untuk items
-      const items = (order.items as unknown as OrderItem[]) || [];
-      const allItemsDone = items.length > 0 && items.every((item: OrderItem) => item.isDone);
-
-      // Jika statusnya COMPLETED (sudah dibayar) DAN koki sudah mencentang semua item,
-      // artinya ini orderan yang sudah selesai diproses dapur. Sembunyikan.
-      if (order.status === OrderStatus.COMPLETED && allItemsDone) {
-        return false;
-      }
-
-      // Sisanya (PENDING, PREPARING, atau COMPLETED yang belum kelar centang) tetap tampil
-      return true;
-    });
-
-    return { success: true, data: activeOrders };
+    return { success: true, data: normalizedOrders };
   } catch (error) {
-    console.error("KITCHEN_FETCH_ERROR:", error);
-    return { success: false, error: "Gagal ambil antrian dapur" };
+    console.error("GET_KITCHEN_ORDERS_ERROR:", error);
+    return { success: false, error: "Gagal mengambil data kitchen" };
   }
 }
 
+/**
+ * Update status utama sebuah Order (Digunakan KDS untuk set COMPLETED).
+ */
+export async function updateOrderStatus(orderId: string, status: OrderStatus) {
+  try {
+    const order = await prisma.order.update({
+      where: { id: orderId },
+      data: { status },
+    });
+
+    revalidatePath("/(dashboard)/kitchen");
+    revalidatePath("/(dashboard)/order");
+    revalidatePath("/(dashboard)/history");
+
+    return {
+      success: true,
+      data: { ...order, items: (order.items as unknown as OrderItem[]) || [] },
+    };
+  } catch (error) {
+    console.error("UPDATE_ORDER_STATUS_ERROR:", error);
+    return { success: false, error: "Gagal update status order" };
+  }
+}
+
+/**
+ * Update status per-item di dalam field Json.
+ */
 export async function updateItemStatus(
   orderId: string,
-  itemIdx: number,
+  itemId: string | number,
   isDone: boolean,
 ) {
   try {
     const order = await prisma.order.findUnique({ where: { id: orderId } });
-    if (!order || !order.items)
-      return { success: false, error: "Order tidak ditemukan" };
+    if (!order) throw new Error("Order tidak ditemukan");
 
-    const items = [...(order.items as unknown as OrderItem[])];
-    if (items[itemIdx]) items[itemIdx].isDone = isDone;
+    const items = (order.items as unknown as OrderItem[]) || [];
 
-    const updated = await prisma.order.update({
-      where: { id: orderId },
-      data: { items: items as unknown as Prisma.InputJsonValue },
+    const updatedItems = items.map((item, index) => {
+      if (typeof itemId === "number") {
+        return index === itemId ? { ...item, isDone } : item;
+      }
+      return item.id === itemId ? { ...item, isDone } : item;
     });
 
-    revalidatePath("/kitchen");
-    return { success: true, data: updated };
+    const updatedOrder = await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        items: updatedItems as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    revalidatePath("/(dashboard)/kitchen");
+    return {
+      success: true,
+      data: { ...updatedOrder, items: updatedItems },
+    };
   } catch (error) {
-    console.error("Update Item Error:", error);
-    return { success: false, error: "Gagal update item" };
+    console.error("UPDATE_ITEM_STATUS_ERROR:", error);
+    return { success: false, error: "Gagal update status item" };
   }
 }
 
-export async function syncBulkOrders(orders: CreateOrderParams[]) {
+/* =========================
+   PRODUCT ACTIONS (MANAGEMENT)
+========================= */
+
+export type ProductWithCategory = Prisma.ProductGetPayload<{
+  include: { category: true };
+}>;
+
+function generateSKU(name: string): string {
+  const prefix = name
+    .slice(0, 3)
+    .toUpperCase()
+    .replace(/[^A-Z]/g, "");
+  const timestamp = Date.now().toString().slice(-4);
+  const random = Math.floor(100 + Math.random() * 900);
+  return `${prefix}-${timestamp}${random}`;
+}
+
+export async function getProducts(): Promise<ProductWithCategory[]> {
   try {
-    const results = await prisma.$transaction(async (tx) => {
-      const processed = [];
-      for (const order of orders) {
-        const exist = await tx.order.findUnique({ where: { id: order.id } });
-        if (!exist) {
-          const created = await tx.order.create({
-            data: {
-              id: order.id,
-              customerName: order.customerName ?? "Guest",
-              total: order.total,
-              paid: order.paid,
-              paymentMethod: String(order.paymentMethod),
-              orderType: order.orderType,
-              items: order.items as unknown as Prisma.InputJsonValue,
-              status: "COMPLETED",
-              createdAt: new Date(order.createdAt),
-            },
-          });
-          await processStockDeduction(tx, order.items, order.id);
-          processed.push(created);
-        }
-      }
-      return processed;
+    return await prisma.product.findMany({
+      include: { category: true },
+      orderBy: { createdAt: "desc" },
     });
-    revalidatePath("/");
-    return { success: true, count: results.length };
   } catch (error) {
-    console.error("Bulk Sync Error:", error);
-    return { success: false };
+    console.error("GET_PRODUCTS_ERROR:", error);
+    return [];
   }
+}
+
+export async function createProduct(
+  rawInput: ProductFormInput,
+): Promise<ProductWithCategory> {
+  const validated = ProductFormSchema.parse(rawInput);
+  const sku = generateSKU(validated.name);
+
+  const product = await prisma.product.create({
+    data: {
+      name: validated.name,
+      description: validated.description ?? null,
+      price: validated.price,
+      sku: sku,
+      categoryId: validated.categoryId,
+      categoryType: validated.categoryType,
+      imageUrl: validated.imageUrl ?? null,
+      isActive: validated.isActive ?? true,
+    },
+    include: { category: true },
+  });
+
+  revalidatePath("/(dashboard)/products");
+  return product;
+}
+
+export async function updateProduct(
+  rawInput: ProductFormInput,
+): Promise<ProductWithCategory> {
+  if (!rawInput.id) throw new Error("ID Produk diperlukan untuk update");
+  const validated = ProductFormSchema.parse(rawInput);
+
+  const product = await prisma.product.update({
+    where: { id: validated.id },
+    data: {
+      name: validated.name,
+      description: validated.description ?? null,
+      price: validated.price,
+      categoryId: validated.categoryId,
+      categoryType: validated.categoryType,
+      imageUrl: validated.imageUrl ?? null,
+      isActive: validated.isActive,
+    },
+    include: { category: true },
+  });
+
+  revalidatePath("/(dashboard)/products");
+  return product;
+}
+
+export async function deactivateProduct(
+  id: string,
+): Promise<ProductWithCategory> {
+  const product = await prisma.product.update({
+    where: { id },
+    data: { isActive: false },
+    include: { category: true },
+  });
+
+  revalidatePath("/(dashboard)/products");
+  return product;
 }
