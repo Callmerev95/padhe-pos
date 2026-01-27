@@ -2,20 +2,19 @@
 
 import { useOrderHistory } from "@/features/order-history/useOrderHistory";
 import { useMemo, useState } from "react";
-import { BarChart3, CalendarDays } from "lucide-react";
-import { PremiumHeader } from "@/components/shared/header/PremiumHeader";
-
-// Menggunakan komponen yang sama dengan harian
 import { ReportStatsSection } from "@/components/shared/reports/ReportStatsSection";
 import { PaymentMethodGrid } from "@/components/shared/reports/PaymentMethodGrid";
 import { RevenueAreaChart } from "@/components/shared/reports/RevenueAreaChart";
+import { MonthlyReportHeader } from "./components/MonthlyReportHeader";
+// Menggunakan shared types untuk keamanan data [cite: 2026-01-12]
+import { ReportData, ChartDataPoint, OrderItem } from "@/types/report.types";
 
 export default function MonthlyReportPage() {
-  const { orders = [], loading } = useOrderHistory({allData: true});
+  const { orders = [], loading } = useOrderHistory({ allData: true });
   
-  // Format YYYY-MM untuk input type="month"
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
 
+  // 1. Filter Logic
   const filteredOrders = useMemo(() => {
     return orders.filter((order) => {
       const orderMonth = new Date(order.createdAt).toISOString().slice(0, 7);
@@ -23,7 +22,8 @@ export default function MonthlyReportPage() {
     });
   }, [orders, selectedMonth]);
 
-  const reportData = useMemo(() => {
+  // 2. Calculation Logic
+  const reportData = useMemo((): ReportData => {
     let foodRevenue = 0, drinkRevenue = 0, totalRevenue = 0;
     let foodQty = 0, drinkQty = 0;
     let cashTotal = 0, qrisTotal = 0, bcaTotal = 0, danaTotal = 0;
@@ -35,7 +35,8 @@ export default function MonthlyReportPage() {
       else if (order.paymentMethod === "BCA") bcaTotal += (order.total || 0);
       else if (order.paymentMethod === "DANA") danaTotal += (order.total || 0);
 
-      order.items?.forEach((item) => {
+      // FIX: Pakai OrderItem, haram pakai 'any' [cite: 2026-01-10]
+      order.items?.forEach((item: OrderItem) => {
         const itemTotal = (item.price || 0) * (item.qty || 0);
         if (item.categoryType === "FOOD") {
           foodRevenue += itemTotal;
@@ -63,11 +64,12 @@ export default function MonthlyReportPage() {
     };
   }, [filteredOrders]);
 
-  const chartData = useMemo(() => {
+  // 3. Chart Logic (Per Hari dalam satu bulan)
+  const chartData = useMemo((): ChartDataPoint[] => {
     const [year, month] = selectedMonth.split('-').map(Number);
     const daysInMonth = new Date(year, month, 0).getDate();
 
-    const daily: Record<string, { name: string; Makanan: number; Minuman: number }> = {};
+    const daily: Record<string, ChartDataPoint> = {};
     for (let i = 1; i <= daysInMonth; i++) {
       const dayLabel = i.toString().padStart(2, '0');
       daily[dayLabel] = { name: dayLabel, Makanan: 0, Minuman: 0 };
@@ -76,7 +78,8 @@ export default function MonthlyReportPage() {
     filteredOrders.forEach(order => {
       const day = new Date(order.createdAt).getDate().toString().padStart(2, '0');
       if (daily[day]) {
-        order.items?.forEach(item => {
+        // FIX: Pakai OrderItem agar build mulus [cite: 2026-01-10]
+        order.items?.forEach((item: OrderItem) => {
           const val = (item.price || 0) * (item.qty || 0);
           if (item.categoryType === "FOOD") daily[day].Makanan += val;
           if (item.categoryType === "DRINK") daily[day].Minuman += val;
@@ -95,31 +98,16 @@ export default function MonthlyReportPage() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-180px)] gap-4 animate-in fade-in duration-700 overflow-hidden pr-2">
-      <PremiumHeader
-        title="LAPORAN BULANAN"
-        subtitle="ANALISA PERFORMA PENJUALAN TIAP BULAN"
-        icon={CalendarDays}
-        actions={
-          <div className="flex items-center gap-3 bg-white/80 backdrop-blur-md px-4 py-1.5 rounded-2xl border border-white shadow-sm">
-            <BarChart3 size={16} className="text-indigo-600" />
-            <div className="flex flex-col">
-              <span className="text-[9px] font-black text-slate-400 uppercase leading-none tracking-tighter">Pilih Bulan</span>
-              <input
-                type="month"
-                className="bg-transparent border-none p-0 text-[11px] font-bold text-slate-700 outline-none focus:ring-0 cursor-pointer"
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-              />
-            </div>
-          </div>
-        }
-      />
+      <MonthlyReportHeader selectedMonth={selectedMonth} onMonthChange={setSelectedMonth} />
 
       <ReportStatsSection {...reportData} />
       <PaymentMethodGrid data={reportData} />
-      <RevenueAreaChart data={chartData} 
-      isEmpty={filteredOrders.length === 0} 
-      title="Tren Penjualan Harian" />
+      
+      <RevenueAreaChart 
+        data={chartData} 
+        isEmpty={filteredOrders.length === 0} 
+        title="Tren Penjualan Harian" 
+      />
 
       <p className="text-center text-[9px] text-slate-300 font-bold uppercase tracking-[0.3em] shrink-0 pt-2 pb-1">
         2026 Padhe Coffee POS System • Arsitektur Global Store v2.0
