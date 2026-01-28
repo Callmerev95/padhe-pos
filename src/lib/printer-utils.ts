@@ -115,8 +115,8 @@ export async function printReceiptBluetooth(data: ReceiptData) {
 
     // --- 6. PEMBAYARAN (Kembali Bold) ---
     if (data.paid) {
-      content += formatRow("Tunai", data.paid);
-      content += formatRow("Kembali", data.change || 0, true); // Kembali kita Bold
+      content += formatRow("Cash", data.paid);
+      content += formatRow("Change", data.change || 0, true); // Kembali kita Bold
     }
 
     content += `--------------------------------\n`;

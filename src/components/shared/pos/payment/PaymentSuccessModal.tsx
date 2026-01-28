@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { CheckCircle2, Home, Printer, Loader2 } from "lucide-react";
 import { useReceiptStore } from "@/store/useReceiptStore";
 import { getPrinterSettings } from "@/app/(dashboard)/user/printerActions";
-import { PrinterSettings, BluetoothNavigator } from "@/app/(dashboard)/settings/printer/types/printer.types";
+import { PrinterSettings } from "@/app/(dashboard)/settings/printer/types/printer.types";
+import { printReceiptBluetooth, type ReceiptData } from "@/lib/printer-utils"; 
 import { toast } from "sonner";
 
 type Props = {
@@ -27,60 +28,45 @@ export function PaymentSuccessModal({ open, onClose }: Props) {
     }
   }, [open]);
 
-  const handleBluetoothPrint = async () => {
-    // ✅ Tambahkan pengecekan menyeluruh agar TypeScript tidak komplain
+  const handlePrint = async () => {
     if (!receipt || !printerConfig) {
       toast.error("Data transaksi atau setting printer belum siap.");
       return;
-    };
+    }
 
     setIsPrinting(true);
+    
+    // Mapping data receipt ke format ReceiptData yang diminta printer-utils
+    const printData: ReceiptData = {
+      header: printerConfig.header,
+      address: printerConfig.address,
+      footer: printerConfig.footer,
+      kasir: receipt.cashierName,
+      customerName: receipt.customerName,
+      orderType: receipt.orderType,
+      items: receipt.items.map(item => ({
+        name: item.name,
+        qty: item.qty,
+        price: item.price
+      })),
+      subtotal: receipt.subtotal,
+      total: receipt.total,
+      paid: receipt.paid,
+      change: receipt.change ?? 0,
+      tax: 0,    // Bisa disesuaikan jika ada logic pajak
+      charge: 0  // Bisa disesuaikan jika ada service charge
+    };
+
     try {
-      const nav = navigator as unknown as BluetoothNavigator;
-      if (!nav.bluetooth) {
-        toast.error("Web Bluetooth tidak didukung di browser ini.");
-        return;
+      const result = await printReceiptBluetooth(printData);
+      if (result.success) {
+        toast.success("Struk berhasil dicetak!");
+      } else {
+        toast.error(result.error || "Gagal mencetak struk.");
       }
-
-      const device = await nav.bluetooth.requestDevice({
-        acceptAllDevices: true,
-        optionalServices: ['000018f0-0000-1000-8000-00805f9b34fb']
-      });
-
-      const server = await device?.gatt?.connect();
-      const service = await server?.getPrimaryService('000018f0-0000-1000-8000-00805f9b34fb');
-      const characteristic = await service?.getCharacteristic('00002af1-0000-1000-8000-00805f9b34fb');
-
-      const encoder = new TextEncoder();
-
-      const line = "--------------------------------\n";
-      const receiptBody = receipt.items.map(item =>
-        `${item.name.toUpperCase()}\n${item.qty} x ${item.price.toLocaleString()} = ${(item.qty * item.price).toLocaleString()}`
-      ).join('\n');
-
-      // ✅ Gunakan fallback (0) jika change bernilai undefined
-      const textToPrint =
-        `${printerConfig.header}\n` +
-        `${printerConfig.address}\n` +
-        line +
-        `Order: ${receipt.orderId}\n` +
-        `Kasir: ${receipt.cashierName}\n` +
-        line +
-        `${receiptBody}\n` +
-        line +
-        `TOTAL: Rp ${receipt.total.toLocaleString()}\n` +
-        `BAYAR: Rp ${receipt.paid.toLocaleString()}\n` +
-        `KEMBALI: Rp ${(receipt.change ?? 0).toLocaleString()}\n` +
-        line +
-        `${printerConfig.footer}\n\n\n\n`;
-
-      const data = encoder.encode(textToPrint);
-      await characteristic?.writeValue(data);
-      toast.success("Struk berhasil dicetak!");
-
     } catch (error) {
       console.error(error);
-      toast.error("Koneksi dibatalkan atau printer tidak ditemukan.");
+      toast.error("Terjadi kesalahan pada printer.");
     } finally {
       setIsPrinting(false);
     }
@@ -108,7 +94,6 @@ export function PaymentSuccessModal({ open, onClose }: Props) {
             <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tight italic">
               SUCCESS!
             </h2>
-            {/* ✅ Pengecekan aman untuk rendering UI */}
             {receipt && (
               <div className="bg-emerald-50 py-2 px-4 rounded-xl inline-block border border-emerald-100">
                 <p className="text-emerald-700 font-black text-xl">
@@ -120,7 +105,7 @@ export function PaymentSuccessModal({ open, onClose }: Props) {
 
           <div className="grid grid-cols-1 gap-3 pt-4">
             <Button
-              onClick={handleBluetoothPrint}
+              onClick={handlePrint}
               disabled={isPrinting}
               className="h-16 rounded-2xl bg-cyan-600 hover:bg-cyan-700 text-white shadow-xl shadow-cyan-100 flex items-center justify-center gap-3 transition-all active:scale-95 disabled:opacity-50"
             >
