@@ -99,11 +99,7 @@ export function PaymentConfirmModal({ open, onClose, onSuccess, method }: Props)
     try {
       const response = await syncOrderToCloud(orderData);
       await saveOrder({ ...orderData, isSynced: response?.success ?? false });
-
-      // ✅ FIX: Panggil clearCart setelah sinkronisasi berhasil
-      // Ini akan membersihkan customerName, items, dan activeOrderId di store
       useCartStore.getState().clearCart();
-
       toast.success("Pesanan berhasil diproses!");
     } catch (err) {
       console.error("SYNC_ERROR:", err);
@@ -140,7 +136,16 @@ export function PaymentConfirmModal({ open, onClose, onSuccess, method }: Props)
                 <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1">
                   Pilih Nominal Cepat
                 </label>
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid grid-cols-5 gap-2">
+                  {/* Shortcut Uang Pas */}
+                  <button
+                    type="button"
+                    onClick={() => setCashReceived(subtotal)}
+                    className="py-3 text-[10px] font-black bg-slate-900 text-white rounded-xl hover:bg-black transition-all active:scale-95 shadow-lg shadow-slate-200"
+                  >
+                    PAS
+                  </button>
+
                   {[5000, 10000, 20000, 50000].map((amt) => (
                     <button
                       key={amt}
@@ -164,10 +169,8 @@ export function PaymentConfirmModal({ open, onClose, onSuccess, method }: Props)
                     onClick={() => setCashReceived("")}
                     className="flex items-center gap-1.5 text-[10px] font-bold text-orange-600 hover:text-orange-700 transition-colors uppercase tracking-tight"
                   >
-                    <div className="flex items-center gap-1">
-                      <RotateCcw size={12} />
-                      Reset
-                    </div>
+                    <RotateCcw size={12} />
+                    Reset
                   </button>
                 </div>
                 <div className="relative">
