@@ -13,18 +13,22 @@ export function ProfitAnalysis({ data }: ProfitAnalysisProps) {
   const isLoss = data.netProfit < 0;
 
   return (
-    <div className="bg-[#0f172a] rounded-[2.5rem] p-9 text-white shadow-2xl relative overflow-hidden h-85 group flex flex-col justify-between border border-white/2">
-      {/* Efek Cahaya (Glow) di Pojok Kanan Atas */}
+    // Ganti bagian pembungkus utama (baris 15-18):
+    <div className={cn(
+      // Hapus h-85, ganti jadi h-full agar bisa ditarik oleh parent grid
+      "bg-[#0f172a] rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden h-full group flex flex-col justify-between border border-white/2 transition-all duration-500",
+      "p-6 xl:p-9"
+    )}>
+      {/* Glow Effect */}
       <div className="absolute top-0 right-0 w-72 h-72 bg-emerald-500/5 blur-[100px] -mr-20 -mt-20 group-hover:bg-emerald-500/15 transition-all duration-1000" />
 
-      <div className="relative z-10">
-        <div className="flex justify-between items-start mb-8">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.25em] opacity-80">
+      <div className="relative z-10 min-w-0"> {/* Tambah min-w-0 sebagai anchor truncate */}
+        <div className="flex justify-between items-start mb-6 xl:mb-8 gap-3">
+          <p className="text-[9px] xl:text-[10px] font-black text-slate-400 uppercase tracking-[0.25em] opacity-80 truncate">
             Net Profit Analysis
           </p>
-          {/* Badge Margin - Warna dinamis jika rugi */}
           <div className={cn(
-            "px-3 py-1.5 border rounded-full text-[10px] font-black uppercase italic tracking-wider transition-colors",
+            "px-2.5 py-1 xl:px-3 xl:py-1.5 border rounded-full text-[8px] xl:text-[10px] font-black uppercase italic tracking-wider transition-colors shrink-0",
             isLoss
               ? "bg-rose-500/10 border-rose-500/20 text-rose-400"
               : "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
@@ -33,28 +37,31 @@ export function ProfitAnalysis({ data }: ProfitAnalysisProps) {
           </div>
         </div>
 
-        <div className="mb-10">
-          {/* Angka Utama - Penyesuaian baseline Rp */}
+        <div className="mb-8 xl:mb-10 min-w-0">
+          {/* TRUNCATE PROTECTION: Nominal utama sekarang aman dari overflow */}
           <h2 className={cn(
-            "text-6xl font-black tracking-tighter leading-none flex items-center",
+            "font-black tracking-tighter leading-none flex items-baseline transition-all duration-500 truncate",
+            "text-3xl sm:text-4xl lg:text-3xl xl:text-5xl 2xl:text-6xl tabular-nums",
             isLoss ? 'text-rose-500' : 'text-emerald-400'
           )}>
-            <span className="text-xl text-slate-600 mr-2 italic font-black self-center translate-y-1">Rp</span>
-            <CountUp end={data.netProfit} separator="," duration={2.5} />
+            <span className="text-sm xl:text-xl text-slate-600 italic font-black mr-1.5 shrink-0">Rp</span>
+            <span className="truncate">
+              <CountUp end={data.netProfit} separator="," duration={2.5} />
+            </span>
           </h2>
         </div>
 
-        {/* Breakdown Biaya Operasional */}
-        <div className="grid grid-cols-2 gap-4 border-t border-white/5 pt-7">
-          <div className="space-y-1.5">
-            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Gross Profit</p>
-            <p className="text-sm lg:text-base font-black text-slate-100 tabular-nums whitespace-nowrap">
+        {/* Breakdown: Truncate pada setiap value */}
+        <div className="grid grid-cols-2 gap-2 xl:gap-4 border-t border-white/5 pt-6 xl:pt-7">
+          <div className="space-y-1 min-w-0">
+            <p className="text-[8px] xl:text-[9px] font-black text-slate-400 uppercase tracking-widest truncate">Gross Profit</p>
+            <p className="text-[10px] sm:text-xs xl:text-base font-black text-slate-100 tabular-nums truncate">
               Rp {data.grossProfit.toLocaleString("id-ID")}
             </p>
           </div>
-          <div className="space-y-1.5 border-l border-white/10 pl-5">
-            <p className="text-[9px] font-black text-rose-500/80 uppercase tracking-widest">Op. Expenses</p>
-            <p className="text-sm lg:text-base font-black text-rose-400 italic tabular-nums whitespace-nowrap">
+          <div className="space-y-1 border-l border-white/10 pl-3 xl:pl-5 min-w-0">
+            <p className="text-[8px] xl:text-[9px] font-black text-rose-500/80 uppercase tracking-widest truncate">Op. Expenses</p>
+            <p className="text-[10px] sm:text-xs xl:text-base font-black text-rose-400 italic tabular-nums truncate">
               - Rp {data.expenses.toLocaleString("id-ID")}
             </p>
           </div>
@@ -62,7 +69,7 @@ export function ProfitAnalysis({ data }: ProfitAnalysisProps) {
       </div>
 
       {/* Progress Bar & Footer */}
-      <div className="relative z-10 space-y-5">
+      <div className="relative z-10 space-y-4 xl:space-y-5">
         <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
           <motion.div
             initial={{ width: 0 }}
@@ -75,9 +82,9 @@ export function ProfitAnalysis({ data }: ProfitAnalysisProps) {
             )}
           />
         </div>
-        <div className="flex justify-between items-center text-[9px] font-black text-slate-500 uppercase italic tracking-[0.15em]">
-          <span>Efficiency Rate</span>
-          <span className="text-slate-400 bg-white/5 px-2 py-0.5 rounded text-[8px] not-italic tracking-normal">Live Data Terminal</span>
+        <div className="flex justify-between items-center text-[8px] xl:text-[9px] font-black text-slate-500 uppercase italic tracking-[0.15em] gap-2">
+          <span className="truncate mr-auto">Efficiency Rate</span>
+          <span className="text-slate-400 bg-white/5 px-2 py-0.5 rounded text-[7px] xl:text-[8px] not-italic shrink-0">Live Terminal</span>
         </div>
       </div>
     </div>
