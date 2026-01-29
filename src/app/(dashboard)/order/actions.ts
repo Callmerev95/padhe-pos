@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache"; // Ditambahkan revalidateTag [cite: 2026-01-12]
 import { OrderStatus, Prisma } from "@prisma/client";
 import { type OrderItem, type LocalOrder } from "@/lib/db";
 
@@ -17,8 +17,8 @@ import {
 
 /**
  * Sinkronisasi order dari local ke cloud.
- * ✅ FIX: Menggunakan tipe 'LocalOrder' menggantikan 'any' sesuai instruksi.
- * ✅ UPDATE: Menambahkan 'paid' pada bagian update agar pelunasan Hold Order tercatat.
+ * ✅ FIX: Menggunakan tipe 'LocalOrder' menggantikan 'any' [cite: 2026-01-10]
+ * ✅ UPDATE: Revalidasi tag 'reports' agar dashboard update otomatis [cite: 2026-01-12]
  */
 export async function syncOrderToCloud(orderData: LocalOrder) {
   try {
@@ -37,7 +37,6 @@ export async function syncOrderToCloud(orderData: LocalOrder) {
     const syncedOrder = await prisma.order.upsert({
       where: { id },
       update: {
-        // ✅ Krusial: Pastikan 'paid' di-update agar saat bayar order Hold, angka pembayarannya masuk.
         paid: Number(paid),
         status: (status as OrderStatus) || OrderStatus.COMPLETED,
         items: items as unknown as Prisma.InputJsonValue,
@@ -55,6 +54,9 @@ export async function syncOrderToCloud(orderData: LocalOrder) {
         createdAt: new Date(createdAt),
       },
     });
+
+    // ✅ TRIGER UPDATE LAPORAN: Buang cache laporan harian/bulanan [cite: 2026-01-12]
+    (revalidateTag as (tag: string) => void)("reports");
 
     // Revalidate semua path dashboard yang berkaitan dengan data order
     revalidatePath("/(dashboard)/order");
@@ -147,6 +149,8 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus) {
       data: { status },
     });
 
+    // ✅ UPDATE: Pastikan laporan di-revalidate jika status berubah (misal: CANCELLED) [cite: 2026-01-12]
+    (revalidateTag as (tag: string) => void)("reports");
     revalidatePath("/(dashboard)/kitchen");
     revalidatePath("/(dashboard)/order");
     revalidatePath("/(dashboard)/history");

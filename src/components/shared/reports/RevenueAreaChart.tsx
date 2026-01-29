@@ -1,3 +1,4 @@
+"use client";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { LayoutDashboard } from "lucide-react";
 
@@ -85,14 +86,14 @@ export function RevenueAreaChart({ data, isEmpty, title = "Tren Penjualan" }: Re
                                         <div className="bg-white p-4 rounded-3xl shadow-2xl border border-slate-50 flex flex-col gap-2 min-w-35">
                                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-2 mb-1">{label} WIB</p>
                                             {payload.map((entry, index) => {
-                                                
+
                                                 const item = entry as unknown as CustomTooltipPayload;
                                                 return (
                                                     <div key={index} className="flex justify-between items-center gap-4">
                                                         <div className="flex items-center gap-2">
-                                                            <div 
-                                                                className="w-2 h-2 rounded-full" 
-                                                                style={{ backgroundColor: item.color }} 
+                                                            <div
+                                                                className="w-2 h-2 rounded-full"
+                                                                style={{ backgroundColor: item.color }}
                                                             />
                                                             <span className="text-[10px] font-bold text-slate-600 uppercase">
                                                                 {item.name}

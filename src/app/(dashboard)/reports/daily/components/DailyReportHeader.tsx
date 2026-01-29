@@ -2,13 +2,24 @@
 
 import { Calendar, BarChart3 } from "lucide-react";
 import { PremiumHeader } from "@/components/shared/header/PremiumHeader";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 
 interface Props {
   selectedDate: string;
-  onDateChange: (date: string) => void;
 }
 
-export function DailyReportHeader({ selectedDate, onDateChange }: Props) {
+export function DailyReportHeader({ selectedDate }: Props) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const handleDateChange = (newDate: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("date", newDate);
+    // Push ke URL yang sama dengan param baru, ini akan memicu Server Component re-fetch data
+    router.push(`${pathname}?${params.toString()}`);
+  };
+
   return (
     <PremiumHeader
       title="LAPORAN HARIAN"
@@ -25,7 +36,7 @@ export function DailyReportHeader({ selectedDate, onDateChange }: Props) {
               type="date"
               className="bg-transparent border-none p-0 text-[11px] font-bold text-slate-700 outline-none focus:ring-0 cursor-pointer"
               value={selectedDate}
-              onChange={(e) => onDateChange(e.target.value)}
+              onChange={(e) => handleDateChange(e.target.value)}
             />
           </div>
         </div>

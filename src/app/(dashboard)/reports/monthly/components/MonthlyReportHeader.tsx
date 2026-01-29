@@ -2,13 +2,23 @@
 
 import { BarChart3, CalendarDays } from "lucide-react";
 import { PremiumHeader } from "@/components/shared/header/PremiumHeader";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 
 interface Props {
   selectedMonth: string;
-  onMonthChange: (month: string) => void;
 }
 
-export function MonthlyReportHeader({ selectedMonth, onMonthChange }: Props) {
+export function MonthlyReportHeader({ selectedMonth }: Props) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const handleMonthChange = (newMonth: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("month", newMonth);
+    router.push(`${pathname}?${params.toString()}`);
+  };
+
   return (
     <PremiumHeader
       title="LAPORAN BULANAN"
@@ -23,7 +33,7 @@ export function MonthlyReportHeader({ selectedMonth, onMonthChange }: Props) {
               type="month"
               className="bg-transparent border-none p-0 text-[11px] font-bold text-slate-700 outline-none focus:ring-0 cursor-pointer"
               value={selectedMonth}
-              onChange={(e) => onMonthChange(e.target.value)}
+              onChange={(e) => handleMonthChange(e.target.value)}
             />
           </div>
         </div>
