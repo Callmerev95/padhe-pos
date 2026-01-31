@@ -34,12 +34,36 @@ export async function syncOrderToCloud(orderData: LocalOrder) {
       createdAt,
     } = orderData;
 
+    // 1. Ambil data lama dari cloud untuk mengecek status item saat ini [cite: 2026-01-12]
+    const existingOrder = await prisma.order.findUnique({
+      where: { id },
+      select: { items: true },
+    });
+
+    let itemsToSync = items;
+
+    // 2. Logika Merging: Jika order sudah ada, pertahankan status 'isDone' yang sudah true di database [cite: 2026-01-12]
+    if (existingOrder && existingOrder.items) {
+      const dbItems = (existingOrder.items as unknown as OrderItem[]) || [];
+
+      itemsToSync = items.map((newItem) => {
+        // Cari item yang sama di database berdasarkan ID uniknya
+        const dbItem = dbItems.find((di) => di.id === newItem.id);
+
+        return {
+          ...newItem,
+          // Jika di DB sudah selesai, tetap selesai. Jika belum, ikuti status terbaru (biasanya false dari POS) [cite: 2026-01-12]
+          isDone: dbItem?.isDone === true || newItem.isDone === true,
+        };
+      });
+    }
+
     const syncedOrder = await prisma.order.upsert({
       where: { id },
       update: {
         paid: Number(paid),
         status: (status as OrderStatus) || OrderStatus.COMPLETED,
-        items: items as unknown as Prisma.InputJsonValue,
+        items: itemsToSync as unknown as Prisma.InputJsonValue, // Gunakan items yang sudah di-merge [cite: 2026-01-12]
         paymentMethod,
       },
       create: {
@@ -50,15 +74,14 @@ export async function syncOrderToCloud(orderData: LocalOrder) {
         paymentMethod,
         orderType,
         status: (status as OrderStatus) || OrderStatus.COMPLETED,
-        items: items as unknown as Prisma.InputJsonValue,
+        items: itemsToSync as unknown as Prisma.InputJsonValue,
         createdAt: new Date(createdAt),
       },
     });
 
-    // ✅ TRIGER UPDATE LAPORAN: Buang cache laporan harian/bulanan [cite: 2026-01-12]
+    // ✅ TRIGER UPDATE LAPORAN
     (revalidateTag as (tag: string) => void)("reports");
 
-    // Revalidate semua path dashboard yang berkaitan dengan data order
     revalidatePath("/(dashboard)/order");
     revalidatePath("/(dashboard)/kitchen");
     revalidatePath("/(dashboard)/history");
@@ -141,6 +164,7 @@ export async function getKitchenOrders() {
 
 /**
  * Update status utama sebuah Order (Digunakan KDS untuk set COMPLETED).
+ * ✅ OPTIMASI: Dipangkas revalidatePath-nya biar gak lemot [cite: 2026-01-12]
  */
 export async function updateOrderStatus(orderId: string, status: OrderStatus) {
   try {
@@ -149,11 +173,15 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus) {
       data: { status },
     });
 
-    // ✅ UPDATE: Pastikan laporan di-revalidate jika status berubah (misal: CANCELLED) [cite: 2026-01-12]
-    (revalidateTag as (tag: string) => void)("reports");
+    // Cukup panggil yang beneran lagi dipake koki biar respon cepet [cite: 2026-01-12]
     revalidatePath("/(dashboard)/kitchen");
-    revalidatePath("/(dashboard)/order");
-    revalidatePath("/(dashboard)/history");
+    
+    // Tag reports biarkan jalan di background [cite: 2026-01-12]
+    (revalidateTag as (tag: string) => void)("reports");
+
+    // Path /history dan /order gak perlu dipanggil di sini karena:
+    // 1. User bakal fetch ulang pas buka halamannya
+    // 2. Realtime Supabase bakal nge-trigger update di UI lain secara otomatis [cite: 2026-01-12]
 
     return {
       success: true,
@@ -167,6 +195,7 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus) {
 
 /**
  * Update status per-item di dalam field Json.
+ * ✅ OPTIMASI: Menghapus delay akibat revalidasi berlebih [cite: 2026-01-12]
  */
 export async function updateItemStatus(
   orderId: string,
@@ -181,9 +210,9 @@ export async function updateItemStatus(
 
     const updatedItems = items.map((item, index) => {
       if (typeof itemId === "number") {
-        return index === itemId ? { ...item, isDone } : item;
+        return index === itemId ? { ...item, isDone: Boolean(isDone) } : item;
       }
-      return item.id === itemId ? { ...item, isDone } : item;
+      return item.id === itemId ? { ...item, isDone: Boolean(isDone) } : item;
     });
 
     const updatedOrder = await prisma.order.update({
@@ -193,7 +222,9 @@ export async function updateItemStatus(
       },
     });
 
+    // Hanya update kitchen path [cite: 2026-01-12]
     revalidatePath("/(dashboard)/kitchen");
+
     return {
       success: true,
       data: { ...updatedOrder, items: updatedItems },
