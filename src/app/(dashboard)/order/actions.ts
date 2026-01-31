@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { revalidatePath, revalidateTag } from "next/cache"; // Ditambahkan revalidateTag [cite: 2026-01-12]
+import { revalidatePath, revalidateTag } from "next/cache";
 import { OrderStatus, Prisma } from "@prisma/client";
 import { type OrderItem, type LocalOrder } from "@/lib/db";
 
@@ -17,8 +17,8 @@ import {
 
 /**
  * Sinkronisasi order dari local ke cloud.
+ * ✅ FIX: Update field 'total' agar sinkron saat penambahan menu (Hold Order) [cite: 2026-01-12]
  * ✅ FIX: Menggunakan tipe 'LocalOrder' menggantikan 'any' [cite: 2026-01-10]
- * ✅ UPDATE: Revalidasi tag 'reports' agar dashboard update otomatis [cite: 2026-01-12]
  */
 export async function syncOrderToCloud(orderData: LocalOrder) {
   try {
@@ -42,17 +42,14 @@ export async function syncOrderToCloud(orderData: LocalOrder) {
 
     let itemsToSync = items;
 
-    // 2. Logika Merging: Jika order sudah ada, pertahankan status 'isDone' yang sudah true di database [cite: 2026-01-12]
+    // 2. Logika Merging: Pertahankan status 'isDone' yang sudah true di database [cite: 2026-01-12]
     if (existingOrder && existingOrder.items) {
       const dbItems = (existingOrder.items as unknown as OrderItem[]) || [];
 
       itemsToSync = items.map((newItem) => {
-        // Cari item yang sama di database berdasarkan ID uniknya
         const dbItem = dbItems.find((di) => di.id === newItem.id);
-
         return {
           ...newItem,
-          // Jika di DB sudah selesai, tetap selesai. Jika belum, ikuti status terbaru (biasanya false dari POS) [cite: 2026-01-12]
           isDone: dbItem?.isDone === true || newItem.isDone === true,
         };
       });
@@ -61,9 +58,10 @@ export async function syncOrderToCloud(orderData: LocalOrder) {
     const syncedOrder = await prisma.order.upsert({
       where: { id },
       update: {
+        total: Number(total), // ✅ FIX: Sekarang total ikut diupdate [cite: 2026-01-12]
         paid: Number(paid),
         status: (status as OrderStatus) || OrderStatus.COMPLETED,
-        items: itemsToSync as unknown as Prisma.InputJsonValue, // Gunakan items yang sudah di-merge [cite: 2026-01-12]
+        items: itemsToSync as unknown as Prisma.InputJsonValue,
         paymentMethod,
       },
       create: {
@@ -79,12 +77,13 @@ export async function syncOrderToCloud(orderData: LocalOrder) {
       },
     });
 
-    // ✅ TRIGER UPDATE LAPORAN
+    // ✅ TRIGGER UPDATE LAPORAN
     (revalidateTag as (tag: string) => void)("reports");
 
-    revalidatePath("/(dashboard)/order");
-    revalidatePath("/(dashboard)/kitchen");
+    // Revalidate path yang krusial [cite: 2026-01-12]
     revalidatePath("/(dashboard)/history");
+    revalidatePath("/(dashboard)/kitchen");
+    revalidatePath("/(dashboard)/order");
 
     return { success: true, data: syncedOrder };
   } catch (error) {
@@ -163,8 +162,8 @@ export async function getKitchenOrders() {
 }
 
 /**
- * Update status utama sebuah Order (Digunakan KDS untuk set COMPLETED).
- * ✅ OPTIMASI: Dipangkas revalidatePath-nya biar gak lemot [cite: 2026-01-12]
+ * Update status utama sebuah Order (KDS).
+ * ✅ OPTIMASI: Rampingkan revalidatePath agar respon cepat [cite: 2026-01-12]
  */
 export async function updateOrderStatus(orderId: string, status: OrderStatus) {
   try {
@@ -173,15 +172,8 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus) {
       data: { status },
     });
 
-    // Cukup panggil yang beneran lagi dipake koki biar respon cepet [cite: 2026-01-12]
     revalidatePath("/(dashboard)/kitchen");
-    
-    // Tag reports biarkan jalan di background [cite: 2026-01-12]
     (revalidateTag as (tag: string) => void)("reports");
-
-    // Path /history dan /order gak perlu dipanggil di sini karena:
-    // 1. User bakal fetch ulang pas buka halamannya
-    // 2. Realtime Supabase bakal nge-trigger update di UI lain secara otomatis [cite: 2026-01-12]
 
     return {
       success: true,
@@ -195,7 +187,6 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus) {
 
 /**
  * Update status per-item di dalam field Json.
- * ✅ OPTIMASI: Menghapus delay akibat revalidasi berlebih [cite: 2026-01-12]
  */
 export async function updateItemStatus(
   orderId: string,
@@ -222,7 +213,6 @@ export async function updateItemStatus(
       },
     });
 
-    // Hanya update kitchen path [cite: 2026-01-12]
     revalidatePath("/(dashboard)/kitchen");
 
     return {
