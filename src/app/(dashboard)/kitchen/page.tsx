@@ -38,6 +38,9 @@ export default function KitchenPage() {
   const [loading, setLoading] = useState(true);
   const [station, setStation] = useState<StationMode>("ALL");
 
+  // ✅ NEW: State untuk nge-block re-fetch pas lagi transisi biar gak flickering [cite: 2026-01-12]
+  const [isProcessing, setIsProcessing] = useState<string | null>(null);
+
   const prevOrdersCount = useRef<number>(0);
   const isFirstLoad = useRef<boolean>(true);
 
@@ -70,6 +73,9 @@ export default function KitchenPage() {
   }, []);
 
   const fetchOrders = useCallback(async () => {
+    // ✅ JANGAN FETCH kalau lagi ada aksi (biar gak bentrok data lama vs baru) [cite: 2026-01-12]
+    if (isProcessing) return;
+
     try {
       const res = await getKitchenOrders();
       if (res.success && res.data) {
@@ -89,8 +95,7 @@ export default function KitchenPage() {
                 price: Number(i.price || 0),
                 categoryType: (i.categoryType as "FOOD" | "DRINK") || "FOOD",
                 notes: i.notes ? String(i.notes) : null,
-                // ✅ FIX: Pastikan casting ke boolean dari data JSON database [cite: 2026-01-12]
-                isDone: i.isDone === true || i.isDone === "true"
+                isDone: i.isDone === true || String(i.isDone) === "true"
               };
             }),
             paymentMethod: (o.paymentMethod as KitchenOrder["paymentMethod"]) || "CASH",
@@ -119,7 +124,7 @@ export default function KitchenPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isProcessing]); // Re-bind saat processing state berubah [cite: 2026-01-12]
 
   useEffect(() => {
     let isMounted = true;
@@ -149,11 +154,9 @@ export default function KitchenPage() {
   }, [supabase, fetchOrders]);
 
   const toggleItemDone = async (orderId: string, itemIdx: number, currentStatus: boolean) => {
-    // ✅ PROTEKSI: Jangan biarkan item yang sudah 'true' diubah lagi [cite: 2026-01-12]
-    if (currentStatus) return;
+    if (currentStatus || isProcessing) return;
 
     const nextStatus = true;
-
     startTransition(() => {
       addOptimisticAction({ type: "TOGGLE_ITEM", orderId, itemIdx, status: nextStatus });
     });
@@ -177,6 +180,9 @@ export default function KitchenPage() {
   };
 
   const handleStatusChange = async (id: string) => {
+    // ✅ SAT-SET: Langsung kunci ID ini dan trigger UI hilang [cite: 2026-01-12]
+    setIsProcessing(id);
+
     startTransition(() => {
       addOptimisticAction({ type: "COMPLETE_ORDER", orderId: id });
     });
@@ -192,6 +198,9 @@ export default function KitchenPage() {
     } catch {
       toast.error("Gagal update");
       void fetchOrders();
+    } finally {
+      // ✅ Berikan jeda 1 detik agar sinkronisasi DB beres baru boleh fetch lagi [cite: 2026-01-12]
+      setTimeout(() => setIsProcessing(null), 1000);
     }
   };
 
@@ -249,8 +258,6 @@ export default function KitchenPage() {
                     .filter(item => station === "ALL" || item.categoryType === station)
                     .map((item) => {
                       const originalIdx = order.items.findIndex(i => i.id === item.id);
-
-                      // ✅ FIX: Hapus 'as any', gunakan pengecekan tipe yang aman [cite: 2026-01-10, 2026-01-12]
                       const isDone = item.isDone === true || String(item.isDone) === "true";
 
                       return (
@@ -294,19 +301,22 @@ export default function KitchenPage() {
                   {(() => {
                     const stationItems = order.items.filter(item => station === "ALL" || item.categoryType === station);
                     const allDone = stationItems.length > 0 && stationItems.every(i => i.isDone);
+                    const isOrderProcessing = isProcessing === order.id;
 
                     return (
                       <button
-                        disabled={!allDone}
+                        disabled={!allDone || isOrderProcessing}
                         onClick={() => handleStatusChange(order.id)}
                         className={cn(
                           "w-full py-4 rounded-2xl text-[10px] font-black uppercase flex items-center justify-center gap-2 transition-all shadow-sm",
                           allDone
                             ? "bg-green-600 text-white hover:bg-green-700 shadow-green-100"
-                            : "bg-slate-100 text-slate-400 cursor-not-allowed"
+                            : "bg-slate-100 text-slate-400 cursor-not-allowed",
+                          isOrderProcessing && "opacity-50 cursor-wait"
                         )}
                       >
-                        <CheckCircle2 size={18} /> {allDone ? "Selesaikan Pesanan" : "Belum Siap"}
+                        <CheckCircle2 size={18} />
+                        {isOrderProcessing ? "Memproses..." : allDone ? "Selesaikan Pesanan" : "Belum Siap"}
                       </button>
                     );
                   })()}

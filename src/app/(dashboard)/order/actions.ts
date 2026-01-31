@@ -164,6 +164,7 @@ export async function getKitchenOrders() {
 
 /**
  * Update status utama sebuah Order (Digunakan KDS untuk set COMPLETED).
+ * ✅ OPTIMASI: Dipangkas revalidatePath-nya biar gak lemot [cite: 2026-01-12]
  */
 export async function updateOrderStatus(orderId: string, status: OrderStatus) {
   try {
@@ -172,11 +173,15 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus) {
       data: { status },
     });
 
-    // ✅ UPDATE: Pastikan laporan di-revalidate jika status berubah (misal: CANCELLED) [cite: 2026-01-12]
-    (revalidateTag as (tag: string) => void)("reports");
+    // Cukup panggil yang beneran lagi dipake koki biar respon cepet [cite: 2026-01-12]
     revalidatePath("/(dashboard)/kitchen");
-    revalidatePath("/(dashboard)/order");
-    revalidatePath("/(dashboard)/history");
+    
+    // Tag reports biarkan jalan di background [cite: 2026-01-12]
+    (revalidateTag as (tag: string) => void)("reports");
+
+    // Path /history dan /order gak perlu dipanggil di sini karena:
+    // 1. User bakal fetch ulang pas buka halamannya
+    // 2. Realtime Supabase bakal nge-trigger update di UI lain secara otomatis [cite: 2026-01-12]
 
     return {
       success: true,
@@ -190,6 +195,7 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus) {
 
 /**
  * Update status per-item di dalam field Json.
+ * ✅ OPTIMASI: Menghapus delay akibat revalidasi berlebih [cite: 2026-01-12]
  */
 export async function updateItemStatus(
   orderId: string,
@@ -204,9 +210,9 @@ export async function updateItemStatus(
 
     const updatedItems = items.map((item, index) => {
       if (typeof itemId === "number") {
-        return index === itemId ? { ...item, isDone } : item;
+        return index === itemId ? { ...item, isDone: Boolean(isDone) } : item;
       }
-      return item.id === itemId ? { ...item, isDone } : item;
+      return item.id === itemId ? { ...item, isDone: Boolean(isDone) } : item;
     });
 
     const updatedOrder = await prisma.order.update({
@@ -216,7 +222,9 @@ export async function updateItemStatus(
       },
     });
 
+    // Hanya update kitchen path [cite: 2026-01-12]
     revalidatePath("/(dashboard)/kitchen");
+
     return {
       success: true,
       data: { ...updatedOrder, items: updatedItems },
