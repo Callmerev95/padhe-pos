@@ -34,12 +34,36 @@ export async function syncOrderToCloud(orderData: LocalOrder) {
       createdAt,
     } = orderData;
 
+    // 1. Ambil data lama dari cloud untuk mengecek status item saat ini [cite: 2026-01-12]
+    const existingOrder = await prisma.order.findUnique({
+      where: { id },
+      select: { items: true },
+    });
+
+    let itemsToSync = items;
+
+    // 2. Logika Merging: Jika order sudah ada, pertahankan status 'isDone' yang sudah true di database [cite: 2026-01-12]
+    if (existingOrder && existingOrder.items) {
+      const dbItems = (existingOrder.items as unknown as OrderItem[]) || [];
+
+      itemsToSync = items.map((newItem) => {
+        // Cari item yang sama di database berdasarkan ID uniknya
+        const dbItem = dbItems.find((di) => di.id === newItem.id);
+
+        return {
+          ...newItem,
+          // Jika di DB sudah selesai, tetap selesai. Jika belum, ikuti status terbaru (biasanya false dari POS) [cite: 2026-01-12]
+          isDone: dbItem?.isDone === true || newItem.isDone === true,
+        };
+      });
+    }
+
     const syncedOrder = await prisma.order.upsert({
       where: { id },
       update: {
         paid: Number(paid),
         status: (status as OrderStatus) || OrderStatus.COMPLETED,
-        items: items as unknown as Prisma.InputJsonValue,
+        items: itemsToSync as unknown as Prisma.InputJsonValue, // Gunakan items yang sudah di-merge [cite: 2026-01-12]
         paymentMethod,
       },
       create: {
@@ -50,15 +74,14 @@ export async function syncOrderToCloud(orderData: LocalOrder) {
         paymentMethod,
         orderType,
         status: (status as OrderStatus) || OrderStatus.COMPLETED,
-        items: items as unknown as Prisma.InputJsonValue,
+        items: itemsToSync as unknown as Prisma.InputJsonValue,
         createdAt: new Date(createdAt),
       },
     });
 
-    // ✅ TRIGER UPDATE LAPORAN: Buang cache laporan harian/bulanan [cite: 2026-01-12]
+    // ✅ TRIGER UPDATE LAPORAN
     (revalidateTag as (tag: string) => void)("reports");
 
-    // Revalidate semua path dashboard yang berkaitan dengan data order
     revalidatePath("/(dashboard)/order");
     revalidatePath("/(dashboard)/kitchen");
     revalidatePath("/(dashboard)/history");
